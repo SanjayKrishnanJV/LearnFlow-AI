@@ -16,7 +16,10 @@ function getConfig(env = {}) {
   }
 }
 
-function buildPrompt(topic, level, goal, time) {
+function buildPrompt(topic, level, goal, time, userLinks) {
+  const linksSection = userLinks && userLinks.trim()
+    ? `\nUser-provided official resources (prioritise these in the roadmap — use the exact URLs, course names, and dates provided):\n${userLinks.trim()}\n`
+    : ''
   return `You are an expert learning architect. Create a highly personalized learning roadmap.
 
 Inputs:
@@ -24,7 +27,7 @@ Inputs:
 - Current level: ${level}
 - Goal: ${goal}
 - Daily time available: ${time}
-
+${linksSection}
 Today's date: June 2026
 
 Return ONLY a JSON object (no markdown fences, no extra text) with this exact structure:
@@ -58,8 +61,9 @@ Return ONLY a JSON object (no markdown fences, no extra text) with this exact st
 
 Rules:
 - 3–5 phases that progress logically from the learner's current level to their stated goal
-- Each phase: 4 specific skills, 2–3 real courses (use real platforms: Microsoft Learn, Coursera, A Cloud Guru, Pluralsight, Udemy, etc.), 2–3 hands-on projects, one clear assessment
-- milestones: 3–5 key checkpoints with realistic dates
+- Each phase: 4 specific skills, 2–3 real courses (if user provided URLs/links above, use those exact courses first; otherwise use real platforms: Microsoft Learn, Coursera, A Cloud Guru, Pluralsight, Udemy, etc.), 2–3 hands-on projects, one clear assessment
+- If user provided certification exam dates or class schedules, incorporate those exact dates into milestones and totalWeeks/targetDate
+- milestones: 3–5 key checkpoints with realistic dates (use user-provided dates if given)
 - todaysTasks: 3–4 concrete day-1 starter tasks appropriate for the learner's current level
 - watchAreas: exactly 1 entry — a specific tip for this learner (not generic advice)
 - Be specific to the topic — use real certification names, real course names, real platforms`
@@ -87,7 +91,7 @@ function parseRoadmap(raw) {
 }
 
 export async function generateRoadmap(body = {}, env = {}) {
-  const { topic = '', level = '', goal = '', time = '' } = body
+  const { topic = '', level = '', goal = '', time = '', userLinks = '' } = body
   const cfg = getConfig(env)
 
   if (!cfg.key) {
@@ -102,7 +106,7 @@ export async function generateRoadmap(body = {}, env = {}) {
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + cfg.key },
     body: JSON.stringify({
       model: cfg.model,
-      messages: [{ role: 'user', content: buildPrompt(topic, level, goal, time) }],
+      messages: [{ role: 'user', content: buildPrompt(topic, level, goal, time, userLinks) }],
       temperature: 0.7,
       max_tokens: 2500,
       response_format: { type: 'json_object' },

@@ -23,7 +23,7 @@ export default class LearnFlow extends React.Component {
     theme: 'light',
     screen: 'landing',
     obStep: 1,
-    obData: { topic: '', level: '', goal: '', time: '' },
+    obData: { topic: '', level: '', goal: '', time: '', hasLinks: '', userLinks: '' },
     obPhase: 'question', // question | generating | done
     obGenIdx: 0,
     faqOpen: 0,
@@ -149,7 +149,7 @@ export default class LearnFlow extends React.Component {
         fetch('/api/roadmap', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(obData),
+          body: JSON.stringify({ ...obData }),
         })
           .then((r) => r.json())
           .then((data) => {
@@ -316,7 +316,7 @@ export default class LearnFlow extends React.Component {
     return () => this.setState({
       screen: 'onboarding',
       obStep: 1,
-      obData: { topic: '', level: '', goal: '', time: '' },
+      obData: { topic: '', level: '', goal: '', time: '', hasLinks: '', userLinks: '' },
       obPhase: 'question',
       obGenIdx: 0,
       obCustom: '',
@@ -326,7 +326,7 @@ export default class LearnFlow extends React.Component {
   resetRoadmap() {
     this.setState({
       roadmap: null, tasks: null, progress: { streak: 0, hoursStudied: 0, lastDate: null },
-      obStep: 1, obData: { topic: '', level: '', goal: '', time: '' }, obPhase: 'question', obGenIdx: 0, screen: 'onboarding',
+      obStep: 1, obData: { topic: '', level: '', goal: '', time: '', hasLinks: '', userLinks: '' }, obPhase: 'question', obGenIdx: 0, screen: 'onboarding',
     })
   }
 
@@ -382,7 +382,7 @@ export default class LearnFlow extends React.Component {
         const resolvedName = authName.trim() || authEmail.split('@')[0]
         if (data.session) {
           localStorage.removeItem('lf_state')
-          this.setState({ user: data.user, userName: resolvedName, authLoading: false, authName: '', authEmail: '', authPassword: '', screen: 'onboarding', obStep: 1, obData: { topic: '', level: '', goal: '', time: '' }, obPhase: 'question', obGenIdx: 0, obCustom: '', roadmap: null, tasks: null, progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [] } })
+          this.setState({ user: data.user, userName: resolvedName, authLoading: false, authName: '', authEmail: '', authPassword: '', screen: 'onboarding', obStep: 1, obData: { topic: '', level: '', goal: '', time: '', hasLinks: '', userLinks: '' }, obPhase: 'question', obGenIdx: 0, obCustom: '', roadmap: null, tasks: null, progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [] } })
         } else {
           this.setState({ authLoading: false, authError: '✉️ Check your inbox to confirm your account, then sign in.' })
         }
@@ -405,7 +405,7 @@ export default class LearnFlow extends React.Component {
       user: null, roadmap: null, tasks: null,
       progress: { streak: 0, hoursStudied: 0, lastDate: null },
       userName: '', chatMsgs: [],
-      obData: { topic: '', level: '', goal: '', time: '' },
+      obData: { topic: '', level: '', goal: '', time: '', hasLinks: '', userLinks: '' },
       obPhase: 'question', obStep: 1, obGenIdx: 0, screen: 'landing',
     })
   }
@@ -496,7 +496,7 @@ export default class LearnFlow extends React.Component {
 
       obStep: this.state.obStep,
       obData: this.state.obData,
-      obProgress: ((this.state.obPhase === 'done' ? 5 : this.state.obStep) / 5 * 100) + '%',
+      obProgress: ((this.state.obPhase === 'done' ? 6 : this.state.obStep) / 6 * 100) + '%',
       obStepQuestion: this.state.obPhase === 'question',
       obGenerating: this.state.obPhase === 'generating',
       obDone: this.state.obPhase === 'done',
@@ -559,12 +559,21 @@ export default class LearnFlow extends React.Component {
       opt('Build a product', 'goal', 'Build a product', 4, { icon: '🚀' }),
       opt('Start a business', 'goal', 'Start a business', 4, { icon: '🏢' }),
     ] }
-    return { title: 'How much time can you commit?', sub: "Be honest — Mentor AI builds a plan you'll actually keep.", cols: '1fr 1fr', maxw: '520px', pad: '18px', options: [
-      opt('30 min / day', 'time', '30 min/day', 'generate', { desc: '~12 month track' }),
-      opt('1 hour / day', 'time', '1 hour/day', 'generate', { desc: '~8 month track' }),
-      opt('2 hours / day', 'time', '2 hours/day', 'generate', { desc: '~5 month track' }),
-      opt('Custom', 'time', 'a custom schedule', 'generate', { desc: 'Set per-day availability' }),
+    if (step === 4) return { title: 'How much time can you commit?', sub: "Be honest — Mentor AI builds a plan you'll actually keep.", cols: '1fr 1fr', maxw: '520px', pad: '18px', options: [
+      opt('30 min / day', 'time', '30 min/day', 5, { desc: '~12 month track' }),
+      opt('1 hour / day', 'time', '1 hour/day', 5, { desc: '~8 month track' }),
+      opt('2 hours / day', 'time', '2 hours/day', 5, { desc: '~5 month track' }),
+      opt('Custom', 'time', 'a custom schedule', 5, { desc: 'Set per-day availability' }),
     ] }
+    if (step === 5) return {
+      title: 'Do you have official course links or schedules?',
+      sub: 'Share them and Mentor AI will build your roadmap around your exact materials. Otherwise AI will suggest the best resources.',
+      cols: '1fr', maxw: '480px', pad: '20px', options: [
+        opt('Yes, I have links or schedules to share', 'hasLinks', 'yes', 6, { desc: 'Paste official training URLs, certification schedules, or class details' }),
+        opt('No, let Mentor AI suggest resources', 'hasLinks', 'no', 'generate', { desc: 'AI will research and include the best available courses and platforms' }),
+      ]
+    }
+    return { title: 'Share your links and schedules', sub: 'Paste official course URLs, certification exam dates, class schedules — anything that helps Mentor AI build an accurate roadmap.', cols: '1fr', maxw: '620px', pad: '18px', isTextArea: true, options: [] }
   }
 
   fmt(text) {
@@ -781,7 +790,7 @@ export default class LearnFlow extends React.Component {
           <div style={S('width:100%; max-width:720px')}>
             {v.obStepQuestion && (
               <div className="lf-screen" style={S('text-align:center')}>
-                <div style={S('font-size:13px; font-weight:700; color:var(--blue); letter-spacing:.1em; margin-bottom:14px')}>STEP {v.obStep} OF 5</div>
+                <div style={S('font-size:13px; font-weight:700; color:var(--blue); letter-spacing:.1em; margin-bottom:14px')}>STEP {v.obStep} OF 6</div>
                 <h1 style={S('font-size:40px; font-weight:800; letter-spacing:-.03em; margin:0 0 12px; text-wrap:balance')}>{v.obQ.title}</h1>
                 <p style={S('font-size:17px; color:var(--muted); margin:0 0 38px')}>{v.obQ.sub}</p>
                 <div style={S(`display:grid; grid-template-columns:${v.obQ.cols}; gap:13px; max-width:${v.obQ.maxw}; margin:0 auto`)}>
@@ -792,6 +801,30 @@ export default class LearnFlow extends React.Component {
                     </button>
                   ))}
                 </div>
+                {v.obQ.isTextArea && (
+                  <div style={S('max-width:' + v.obQ.maxw + '; margin:4px auto 0; display:flex; flex-direction:column; gap:12px')}>
+                    <textarea
+                      value={this.state.obData.userLinks || ''}
+                      onChange={(ev) => this.setState((s) => ({ obData: { ...s.obData, userLinks: ev.target.value } }))}
+                      rows={6}
+                      placeholder={'Paste anything helpful:\n• Official course URLs (e.g. https://learn.microsoft.com/...)\n• Certification exam schedules and dates\n• Class timetables or cohort start dates\n• Any other training materials'}
+                      style={S('width:100%; padding:14px 16px; border-radius:14px; border:1.5px solid var(--border); background:var(--surface-2); color:var(--text); font-size:14.5px; font-family:inherit; resize:vertical; outline:none; line-height:1.6; box-sizing:border-box')}
+                    />
+                    <div style={S('display:flex; gap:10px')}>
+                      <button
+                        className="lf-btn"
+                        onClick={() => this.obSelect('userLinks', this.state.obData.userLinks, 'generate')()}
+                        disabled={!this.state.obData.userLinks?.trim()}
+                        style={S('flex:1; padding:14px; border-radius:12px; border:none; background:linear-gradient(135deg,var(--blue),var(--violet)); color:#fff; font-weight:700; font-size:15px; cursor:pointer; opacity:' + (this.state.obData.userLinks?.trim() ? '1' : '.45'))}
+                      >Use these links &amp; generate roadmap</button>
+                      <button
+                        className="lf-btn"
+                        onClick={() => this.obSelect('userLinks', '', 'generate')()}
+                        style={S('padding:14px 18px; border-radius:12px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-weight:600; font-size:14px; cursor:pointer; white-space:nowrap')}
+                      >Skip, let AI decide</button>
+                    </div>
+                  </div>
+                )}
                 {v.obQ.showCustomInput && (
                   <div style={S('max-width:' + v.obQ.maxw + '; margin:14px auto 0; display:flex; gap:10px')}>
                     <input
