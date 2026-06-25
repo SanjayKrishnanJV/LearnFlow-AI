@@ -270,7 +270,7 @@ export default class LearnFlow extends React.Component {
               })
             }
           })
-          .catch(() => { /* no key or error — fall back to mock data silently */ })
+          .catch(() => { /* no key or error fall back to mock data silently */ })
           .finally(() => { this._roadmapReady = true; finalize() })
 
         this._g = setInterval(() => {
@@ -317,10 +317,10 @@ export default class LearnFlow extends React.Component {
       if (err.code === 'no_key' || /key/i.test(err.message)) {
         // No API key yet — fall back to a canned reply so the demo still works.
         const fallback = this.replyFor(text)
-        fallback.text = '⚙️ Offline demo reply — add GROQ_API_KEY to .env (see .env.example) and restart the dev server for real Mentor AI. ' + fallback.text
+        fallback.text = '⚙️ Offline demo reply add GROQ_API_KEY to .env (see .env.example) and restart the dev server for real Mentor AI. ' + fallback.text
         this.setState((s) => ({ chatMsgs: [...s.chatMsgs, { role: 'ai', ...fallback }], chatTyping: false }))
       } else {
-        this.setState((s) => ({ chatMsgs: [...s.chatMsgs, { role: 'ai', text: 'Sorry — I hit an error reaching the model: ' + err.message, bullets: [], sources: [] }], chatTyping: false }))
+        this.setState((s) => ({ chatMsgs: [...s.chatMsgs, { role: 'ai', text: 'Sorry I hit an error reaching the model: ' + err.message, bullets: [], sources: [] }], chatTyping: false }))
       }
     }
   }
@@ -355,10 +355,10 @@ export default class LearnFlow extends React.Component {
     const topic = rm?.headline || 'your learning goal'
     const phase = rm?.phases?.find((p) => p.status === 'In progress') || rm?.phases?.[0]
     return {
-      text: 'Good question! To give you the best answer I need a live connection to Mentor AI — add GROQ_API_KEY to .env and restart. Here\'s a general take on ' + topic + ':',
+      text: 'Good question! To give you the best answer I need a live connection to Mentor AI add GROQ_API_KEY to .env and restart. Here\'s a general take on ' + topic + ':',
       bullets: [
-        phase ? ('Focus on ' + phase.title + ' — ' + phase.sub) : 'Start with the fundamentals and build a solid foundation.',
-        'Consistency beats intensity — even 30 minutes daily compounds fast.',
+        phase ? ('Focus on ' + phase.title + ' ' + phase.sub) : 'Start with the fundamentals and build a solid foundation.',
+        'Consistency beats intensity even 30 minutes daily compounds fast.',
         'Hands-on projects lock in what you learn far better than passive reading.',
       ],
       sources: [rm ? { t: 'Your roadmap · ' + topic, m: 'Mentor AI' } : { t: 'Learning best practices', m: 'Mentor AI' }],
@@ -404,7 +404,7 @@ export default class LearnFlow extends React.Component {
     // Build a varied pool from phase content
     const pool = [
       ...(rm.todaysTasks || []).map((t) => ({ ...t, done: false })),
-      ...(phase.courses || []).slice(0, 3).map((c) => ({ t: 'Study: ' + c.split(' | ')[0].split(' — ')[0].trim(), d: '45 min', done: false })),
+      ...(phase.courses || []).slice(0, 3).map((c) => ({ t: 'Study: ' + c.split(' | ')[0].split(' ')[0].trim(), d: '45 min', done: false })),
       ...(phase.skills || []).slice(0, 4).map((s) => ({ t: 'Practice: ' + s, d: '20 min', done: false })),
       ...(phase.projects || []).slice(0, 2).map((p) => ({ t: 'Work on: ' + p, d: '30 min', done: false })),
     ]
@@ -533,8 +533,8 @@ export default class LearnFlow extends React.Component {
     const tasks = this.state.tasks || rm?.todaysTasks || []
     return {
       todo: tasks.filter((t) => !t.done).map((t) => ({ id: 't' + t.t.slice(0, 8), t: t.t, m: phaseLabel + ' · ' + t.d, c: 'var(--blue)' }))
-        .concat((phase?.courses || []).slice(2, 4).map((c, i) => ({ id: 'c' + i, t: c.split(' — ')[0], m: phaseLabel + ' · Course', c: 'var(--violet)' }))),
-      inprogress: (phase?.courses || []).slice(0, 2).map((c, i) => ({ id: 'ip' + i, t: c.split(' — ')[0], m: phaseLabel, c: 'var(--blue)' }))
+        .concat((phase?.courses || []).slice(2, 4).map((c, i) => ({ id: 'c' + i, t: c.split(' ')[0], m: phaseLabel + ' · Course', c: 'var(--violet)' }))),
+      inprogress: (phase?.courses || []).slice(0, 2).map((c, i) => ({ id: 'ip' + i, t: c.split(' ')[0], m: phaseLabel, c: 'var(--blue)' }))
         .concat((phase?.projects || []).slice(0, 1).map((p, i) => ({ id: 'pr' + i, t: p, m: phaseLabel + ' · Project', c: 'var(--amber)' }))),
       done: tasks.filter((t) => t.done).map((t) => ({ id: 'd' + t.t.slice(0, 8), t: t.t, m: 'Completed today', c: 'var(--emerald)' })),
     }
@@ -852,11 +852,11 @@ export default class LearnFlow extends React.Component {
           ],
       features: [
         { title: 'AI Learning Planner', desc: 'Describe a goal in plain language. Mentor AI builds a phased roadmap with weekly plans and daily tasks.', icon: 'M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1', color: 'var(--blue)', soft: 'var(--blue-soft)' },
-        { title: 'Progress Coach', desc: 'Streaks, completion rates, and consistency tracked automatically — with nudges before you fall behind.', icon: 'M4 20V11M10 20V4M16 20v-6M3 20h18', color: 'var(--emerald)', soft: 'var(--emerald-soft)' },
+        { title: 'Progress Coach', desc: 'Streaks, completion rates, and consistency tracked automatically with nudges before you fall behind.', icon: 'M4 20V11M10 20V4M16 20v-6M3 20h18', color: 'var(--emerald)', soft: 'var(--emerald-soft)' },
         { title: 'Career Advisor', desc: 'Maps your current skills to target roles and industry demand, then recommends the gaps to close.', icon: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z', color: 'var(--violet)', soft: 'var(--violet-soft)' },
         { title: 'Weekly Review', desc: 'An executive summary every Sunday: accomplishments, missed goals, and what to prioritize next.', icon: 'M7 3h10v18H7zM7 7h10M7 11h10M7 15h6', color: 'var(--amber)', soft: 'var(--amber-soft)' },
-        { title: 'Skill Tree', desc: "See your knowledge as a living map — what you've mastered, what's in progress, and what unlocks next.", icon: 'M12 3v4M6 17l6-6 6 6M10 3h4v4h-4zM4 17h4v4H4zM16 17h4v4h-4z', color: 'var(--blue)', soft: 'var(--blue-soft)' },
-        { title: 'Grounded Answers', desc: 'Every Mentor AI reply cites your roadmap and verified sources — guidance you can actually trust.', icon: 'M6 4h10v16H8a2 2 0 0 0-2 2zM6 4v18', color: 'var(--emerald)', soft: 'var(--emerald-soft)' },
+        { title: 'Skill Tree', desc: "See your knowledge as a living map what you've mastered, what's in progress, and what unlocks next.", icon: 'M12 3v4M6 17l6-6 6 6M10 3h4v4h-4zM4 17h4v4H4zM16 17h4v4h-4z', color: 'var(--blue)', soft: 'var(--blue-soft)' },
+        { title: 'Grounded Answers', desc: 'Every Mentor AI reply cites your roadmap and verified sources guidance you can actually trust.', icon: 'M6 4h10v16H8a2 2 0 0 0-2 2zM6 4v18', color: 'var(--emerald)', soft: 'var(--emerald-soft)' },
       ],
       testimonials: [
         { quote: 'I went from zero cloud experience to AZ-104 certified in 5 months. The weekly reviews kept me honest.', name: 'Priya Nair', role: 'Cloud Engineer, Stripe', initials: 'PN', bg: 'var(--blue-soft)', fg: 'var(--blue-ink)' },
@@ -864,13 +864,13 @@ export default class LearnFlow extends React.Component {
         { quote: 'The skill tree finally made my growth visible. My manager and I use it in every 1:1.', name: 'Sofia Alvarez', role: 'PM, Atlassian', initials: 'SA', bg: 'var(--violet-soft)', fg: 'var(--violet)' },
       ],
       pricing: [
-        { name: 'Free — always', price: '$0', per: '', tagline: 'Everything included, no card required', feats: ['Unlimited AI-generated roadmaps', 'Full Mentor AI chat', 'Progress tracking & streaks', 'Analytics & skill tree', 'Weekly planner & task board', 'Cross-device sync'], cta: 'Start learning free', featured: true,
+        { name: 'Free always', price: '$0', per: '', tagline: 'Everything included, no card required', feats: ['Unlimited AI-generated roadmaps', 'Full Mentor AI chat', 'Progress tracking & streaks', 'Analytics & skill tree', 'Weekly planner & task board', 'Cross-device sync'], cta: 'Start learning free', featured: true,
           cardBg: 'linear-gradient(160deg,var(--blue),var(--violet))', border: 'transparent', shadow: 'var(--shadow-lg)', text: '#fff', check: '#fff', btnBg: '#fff', btnText: 'var(--blue-ink)' },
       ],
       faqs: [
-        { q: 'How does Mentor AI build my roadmap?', a: 'You describe your goal, level, and time commitment. Mentor AI maps that to certification objectives and proven learning paths, then generates phases, weekly plans, and daily tasks — adapting as you progress.' },
+        { q: 'How does Mentor AI build my roadmap?', a: 'You describe your goal, level, and time commitment. Mentor AI maps that to certification objectives and proven learning paths, then generates phases, weekly plans, and daily tasks adapting as you progress.' },
         { q: 'Can I use it for any skill, not just cloud?', a: 'Yes. From data science to product management to design, Mentor AI builds structured paths for any skill. Cloud/Azure is just our most popular track.' },
-        { q: 'Does it work on mobile?', a: 'Fully. The mobile app has your dashboard, planner, AI mentor, and roadmap — designed for one-handed use so you can learn anywhere.' },
+        { q: 'Does it work on mobile?', a: 'Fully. The mobile app has your dashboard, planner, AI mentor, and roadmap designed for one-handed use so you can learn anywhere.' },
         { q: 'Is my data private?', a: 'Your learning data is encrypted and never sold. Mentor AI uses it only to personalize your experience. You can export or delete everything at any time.' },
       ].map((f, i) => ({ ...f, open: this.state.faqOpen === i, sign: this.state.faqOpen === i ? '−' : '+', onToggle: this.toggleFaq(i) })),
 
@@ -929,9 +929,9 @@ export default class LearnFlow extends React.Component {
       opt('AI Engineering', 'topic', 'AI Engineering', 2, { icon: '🤖' }),
     ] }
     if (step === 2) return { title: "What's your current level?", sub: 'Mentor AI calibrates the starting point and pace.', cols: '1fr', maxw: '440px', pad: '18px', options: [
-      opt('Beginner', 'level', 'Beginner', 3, { desc: 'New to this — start from fundamentals' }),
+      opt('Beginner', 'level', 'Beginner', 3, { desc: 'New to this start from fundamentals' }),
       opt('Intermediate', 'level', 'Intermediate', 3, { desc: 'Some experience, ready to go deeper' }),
-      opt('Advanced', 'level', 'Advanced', 3, { desc: 'Confident — focused on mastery & certs' }),
+      opt('Advanced', 'level', 'Advanced', 3, { desc: 'Confident focused on mastery & certs' }),
     ] }
     if (step === 3) return { title: "What's your target goal?", sub: 'This shapes your milestones and projects.', cols: '1fr 1fr', maxw: '520px', pad: '18px', options: [
       opt('Get certified', 'goal', 'Get certified', 4, { icon: '🎓' }),
@@ -939,7 +939,7 @@ export default class LearnFlow extends React.Component {
       opt('Build a product', 'goal', 'Build a product', 4, { icon: '🚀' }),
       opt('Start a business', 'goal', 'Start a business', 4, { icon: '🏢' }),
     ] }
-    if (step === 4) return { title: 'How much time can you commit?', sub: "Be honest — Mentor AI builds a plan you'll actually keep.", cols: '1fr 1fr', maxw: '520px', pad: '18px', options: [
+    if (step === 4) return { title: 'How much time can you commit?', sub: "Be honest Mentor AI builds a plan you'll actually keep.", cols: '1fr 1fr', maxw: '520px', pad: '18px', options: [
       opt('30 min / day', 'time', '30 min/day', 5, { desc: '~12 month track' }),
       opt('1 hour / day', 'time', '1 hour/day', 5, { desc: '~8 month track' }),
       opt('2 hours / day', 'time', '2 hours/day', 5, { desc: '~5 month track' }),
@@ -953,7 +953,7 @@ export default class LearnFlow extends React.Component {
         opt('No, let Mentor AI suggest resources', 'hasLinks', 'no', 'generate', { desc: 'AI will research and include the best available courses and platforms' }),
       ]
     }
-    return { title: 'Share your links and schedules', sub: 'Paste official course URLs, certification exam dates, class schedules — anything that helps Mentor AI build an accurate roadmap.', cols: '1fr', maxw: '620px', pad: '18px', isTextArea: true, options: [] }
+    return { title: 'Share your links and schedules', sub: 'Paste official course URLs, certification exam dates, class schedules anything that helps Mentor AI build an accurate roadmap.', cols: '1fr', maxw: '620px', pad: '18px', isTextArea: true, options: [] }
   }
 
   fmt(text) {
@@ -1019,10 +1019,10 @@ export default class LearnFlow extends React.Component {
         <div style={S('max-width:1180px; margin:0 auto; padding:84px 28px 60px; text-align:center; position:relative')}>
           <div style={S('display:inline-flex; align-items:center; gap:9px; padding:7px 15px; border-radius:99px; background:var(--blue-soft); border:1px solid var(--border); margin-bottom:30px')}>
             <span style={S('width:7px; height:7px; border-radius:99px; background:var(--emerald)')} />
-            <span style={S('font-size:13px; font-weight:600; color:var(--blue-ink)')}>Meet Mentor AI — your personal learning architect</span>
+            <span style={S('font-size:13px; font-weight:600; color:var(--blue-ink)')}>Meet Mentor AI your personal learning architect</span>
           </div>
           <h1 style={S('font-size:68px; line-height:1.04; font-weight:800; letter-spacing:-.035em; margin:0 auto 22px; max-width:880px; text-wrap:balance')}>Turn learning goals into <span style={S('background:linear-gradient(120deg,var(--blue),var(--violet)); -webkit-background-clip:text; background-clip:text; color:transparent')}>achievements</span></h1>
-          <p style={S('font-size:20px; line-height:1.5; color:var(--muted); max-width:600px; margin:0 auto 38px; text-wrap:pretty')}>AI-powered learning plans, progress tracking, and personalized guidance to help you master any skill — from your first course to your dream certification.</p>
+          <p style={S('font-size:20px; line-height:1.5; color:var(--muted); max-width:600px; margin:0 auto 38px; text-wrap:pretty')}>AI-powered learning plans, progress tracking, and personalized guidance to help you master any skill from your first course to your dream certification.</p>
           <div style={S('display:flex; gap:14px; justify-content:center; align-items:center; flex-wrap:wrap')}>
             <button className="lf-btn" onClick={v.goStart} style={S('padding:15px 26px; border-radius:13px; border:none; background:linear-gradient(135deg,var(--blue),var(--blue-ink)); color:#fff; font-weight:600; font-size:16px; cursor:pointer; box-shadow:var(--shadow)')}>Start Learning Free</button>
             <button className="lf-btn" onClick={v.goTo.dashboard} style={S('padding:15px 24px; border-radius:13px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); font-weight:600; font-size:16px; cursor:pointer; display:flex; align-items:center; gap:9px')}>
@@ -1321,7 +1321,7 @@ export default class LearnFlow extends React.Component {
               {isSignUp ? 'Create your account' : 'Welcome back'}
             </h1>
             <p style={S('font-size:14.5px; color:var(--muted); text-align:center; margin:0 0 26px')}>
-              {isSignUp ? 'Start learning smarter — free forever.' : 'Sign in to continue your journey.'}
+              {isSignUp ? 'Start learning smarter free forever.' : 'Sign in to continue your journey.'}
             </p>
 
             <div style={S('display:flex; flex-direction:column; gap:13px')}>
@@ -1374,7 +1374,7 @@ export default class LearnFlow extends React.Component {
               )}
               {authResetSent && (
                 <div style={S('padding:11px 14px; border-radius:11px; background:var(--emerald-soft); border:1px solid var(--emerald); font-size:13.5px; color:var(--text); text-align:center')}>
-                  ✉️ Reset link sent — check your inbox, then sign in.
+                  ✉️ Reset link sent check your inbox, then sign in.
                 </div>
               )}
             </div>
@@ -1516,7 +1516,7 @@ export default class LearnFlow extends React.Component {
         e('div', { style: { width: 64, height: 64, borderRadius: 18, margin: '0 auto 22px', background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: 'var(--shadow)' } },
           e('svg', { width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1' }))),
         e('h2', { style: { fontSize: 30, fontWeight: 800, letterSpacing: '-.03em', margin: '0 0 10px' } }, 'How can I help you learn today?'),
-        e('p', { style: { fontSize: 16, color: 'var(--muted)', margin: '0 auto', maxWidth: 440 } }, this.state.roadmap ? 'Ask anything about your ' + this.state.roadmap.headline + ' roadmap — study plans, quizzes, progress checks, scheduling.' : "Ask me anything about learning — I'll help you build a plan, quiz you, or guide you to your next goal.")
+        e('p', { style: { fontSize: 16, color: 'var(--muted)', margin: '0 auto', maxWidth: 440 } }, this.state.roadmap ? 'Ask anything about your ' + this.state.roadmap.headline + ' roadmap study plans, quizzes, progress checks, scheduling.' : "Ask me anything about learning I'll help you build a plan, quiz you, or guide you to your next goal.")
       )
     }
     const bubbles = msgs.map((m, i) => m.role === 'user'
@@ -1593,9 +1593,9 @@ export default class LearnFlow extends React.Component {
       ? `Your ${rm.headline} roadmap is ready! 🎯`
       : `Welcome${displayName ? ', ' + displayName : ''} 👋`
     const greetSub = rm && streak === 0
-      ? `${rm.totalWeeks}-week plan, ${rm.hoursPerDay}/day — complete your first tasks to start your streak.`
+      ? `${rm.totalWeeks}-week plan, ${rm.hoursPerDay}/day complete your first tasks to start your streak.`
       : rm
-      ? `${streak}-day streak 🔥 Keep it up — ${currentTasks.length - doneTasks} tasks left today.`
+      ? `${streak}-day streak 🔥 Keep it up ${currentTasks.length - doneTasks} tasks left today.`
       : 'Generate your roadmap to get personalised tasks, goals and Mentor AI guidance.'
 
     // Active learning paths
@@ -1882,7 +1882,7 @@ export default class LearnFlow extends React.Component {
 
     // --- WEEK VIEW data ---
     const phase = rm.phases?.[0]
-    const courses = (phase?.courses || []).map((c, i) => ({ id: 'rc' + i, t: c.split(' — ')[0].split(' | ')[0], time: i % 2 === 0 ? '09:00' : '19:00', c: 'var(--blue)', soft: 'var(--blue-soft)' }))
+    const courses = (phase?.courses || []).map((c, i) => ({ id: 'rc' + i, t: c.split(' ')[0].split(' | ')[0], time: i % 2 === 0 ? '09:00' : '19:00', c: 'var(--blue)', soft: 'var(--blue-soft)' }))
     const projects = (phase?.projects || []).map((p, i) => ({ id: 'rp' + i, t: p, time: '10:00', c: 'var(--emerald)', soft: 'var(--emerald-soft)' }))
     const daytasks = (rm.todaysTasks || []).map((t, i) => ({ id: 'rt' + i, t: t.t, time: '09:00', c: 'var(--violet)', soft: 'var(--violet-soft)' }))
     const pool = [...daytasks, ...courses, ...projects]
@@ -1998,7 +1998,7 @@ export default class LearnFlow extends React.Component {
       const phase = rm.phases?.find((p) => p.status === 'In progress') || rm.phases?.[0]
       const taskPool = [
         ...(rm.todaysTasks || []).map((t) => ({ t: t.t, c: 'var(--violet)', src: 'task' })),
-        ...(phase?.courses || []).map((c) => ({ t: c.split(' | ')[0].split(' — ')[0].trim(), c: 'var(--blue)', src: 'course' })),
+        ...(phase?.courses || []).map((c) => ({ t: c.split(' | ')[0].split(' ')[0].trim(), c: 'var(--blue)', src: 'course' })),
         ...(phase?.projects || []).map((p) => ({ t: p, c: 'var(--emerald)', src: 'project' })),
       ]
       if (taskPool.length > 0) {
@@ -2292,7 +2292,7 @@ export default class LearnFlow extends React.Component {
       nextPhase && e('div', { style: { display: 'flex', gap: 14, padding: '14px 18px', borderRadius: 14, background: 'var(--blue-soft)', border: '1px solid var(--border)', alignItems: 'center' } },
         e('div', { style: { width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' } },
           e('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3' }))),
-        e('div', { style: { flex: 1, fontSize: 14, color: 'var(--text)' } }, e('b', {}, 'Next: ' + nextPhase.title + ' · ' + nextPhase.cert), ' — ' + nextPhase.sub),
+        e('div', { style: { flex: 1, fontSize: 14, color: 'var(--text)' } }, e('b', {}, 'Next: ' + nextPhase.title + ' · ' + nextPhase.cert), ' ' + nextPhase.sub),
         e('button', { className: 'lf-btn', onClick: this.go('mentor'), style: { padding: '8px 14px', borderRadius: 9, border: 'none', background: 'var(--blue)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' } }, 'Ask Mentor how'))
     )
   }
@@ -2541,7 +2541,7 @@ export default class LearnFlow extends React.Component {
         e('div', { style: { fontSize: 15, fontWeight: 700, padding: '16px 0 8px' } }, 'Account'),
         e('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 } },
           e('button', { className: 'lf-btn', onClick: () => this.exportData(), style: { padding: '10px 16px', borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' } }, 'Export my data'),
-          e('span', { style: { padding: '10px 16px', borderRadius: 11, border: '1px solid var(--emerald)', background: 'var(--emerald-soft)', color: 'var(--emerald)', fontWeight: 600, fontSize: 13.5, display: 'inline-flex', alignItems: 'center', gap: 6 } }, '✓ Free forever — no subscription needed'),
+          e('span', { style: { padding: '10px 16px', borderRadius: 11, border: '1px solid var(--emerald)', background: 'var(--emerald-soft)', color: 'var(--emerald)', fontWeight: 600, fontSize: 13.5, display: 'inline-flex', alignItems: 'center', gap: 6 } }, '✓ Free forever no subscription needed'),
           e('button', { className: 'lf-btn', onClick: () => this.doSignOut(), style: { padding: '10px 16px', borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', color: '#EF4444', fontWeight: 600, fontSize: 13.5, cursor: 'pointer' } }, this.state.user ? 'Sign out' : 'Reset & start over')))
     )
   }
@@ -2574,7 +2574,7 @@ export default class LearnFlow extends React.Component {
     const mobCurPhaseObj = mobRm ? mobRm.phases?.[this._currentPhaseIdx()] : null
     const mobCurPhasePct = mobCurPhaseObj ? this._phasePct(this._currentPhaseIdx()) : 0
     const mobMentorMsg = mobRm && mobCurPhaseObj
-      ? `Focus on ${mobCurPhaseObj.title} — ${mobCurPhasePct}% complete. ${mobCurPhaseObj.sub}`
+      ? `Focus on ${mobCurPhaseObj.title} ${mobCurPhasePct}% complete. ${mobCurPhaseObj.sub}`
       : 'Generate your roadmap to get personalised daily guidance from Mentor AI.'
     const mobPlannerDayName = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
     const mobPlannerTasks = mobRm ? mobTasks.slice(0, 3).map((t, i) => [['9:00', '13:00', '19:00'][i], t.t, 'var(--blue)', 'var(--blue-soft)']) : []
@@ -2602,7 +2602,7 @@ export default class LearnFlow extends React.Component {
         ? mobTasks.slice(0, 3).map((t, i) => e('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)' } },
             e('span', { style: { width: 20, height: 20, borderRadius: 7, flex: 'none', background: t.done ? 'var(--emerald)' : 'transparent', border: t.done ? 'none' : '2px solid var(--border-strong)', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, t.done ? e('svg', { width: 11, height: 11, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 3.5 }, e('path', { d: 'M20 6 9 17l-5-5' })) : null),
             e('span', { style: { fontSize: 13, fontWeight: 500, textDecoration: t.done ? 'line-through' : 'none', color: t.done ? 'var(--subtle)' : 'var(--text)' } }, t.t)))
-        : e('div', { style: { fontSize: 13, color: 'var(--muted)', padding: '10px 0' } }, 'No tasks yet — generate your roadmap first.'),
+        : e('div', { style: { fontSize: 13, color: 'var(--muted)', padding: '10px 0' } }, 'No tasks yet generate your roadmap first.'),
       e('div', { style: { borderRadius: 14, padding: 14, background: 'var(--blue-soft)', border: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'flex-start' } },
         e('div', { style: { width: 24, height: 24, borderRadius: 7, flex: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center' } }, e('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2 }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3' }))),
         e('div', { style: { fontSize: 12.5, lineHeight: 1.45 } }, e('b', {}, 'Mentor AI:'), ' ' + mobMentorMsg)))
@@ -2637,28 +2637,87 @@ export default class LearnFlow extends React.Component {
         ? mobPlannerTasks.map((s, i) => e('div', { key: i, style: { display: 'flex', gap: 12 } },
             e('div', { style: { width: 42, fontSize: 11.5, fontWeight: 700, color: 'var(--muted)', paddingTop: 11, flex: 'none' } }, s[0]),
             e('div', { style: { flex: 1, padding: '11px 13px', borderRadius: 13, background: s[3], borderLeft: '3px solid ' + s[2] } }, e('div', { style: { fontSize: 13.5, fontWeight: 600 } }, s[1]))))
-        : e('div', { style: { textAlign: 'center', padding: '20px 0', fontSize: 13, color: 'var(--muted)' } }, 'No sessions yet — generate your roadmap first.'),
+        : e('div', { style: { textAlign: 'center', padding: '20px 0', fontSize: 13, color: 'var(--muted)' } }, 'No sessions yet generate your roadmap first.'),
       mobMilestones.length > 0 && e('div', { style: { marginTop: 4, padding: '12px 14px', borderRadius: 13, background: 'var(--amber-soft)', border: '1px solid var(--border)' } },
         e('div', { style: { fontSize: 10.5, fontWeight: 700, color: 'var(--muted)', letterSpacing: '.05em', marginBottom: 6 } }, 'UPCOMING MILESTONES'),
         mobMilestones.map((m, i) => e('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, marginBottom: i < mobMilestones.length - 1 ? 5 : 0 } },
           e('span', {}, m.t), e('span', { style: { color: 'var(--muted)' } }, m.d)))),
       e('div', { style: { marginTop: 4, padding: '12px', borderRadius: 13, border: '1.5px dashed var(--border-strong)', textAlign: 'center', fontSize: 12.5, color: 'var(--muted)', fontWeight: 600 } }, '+ Add study session'))
-    return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 22 } },
-      e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 } },
-        e('div', {},
-          e('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-.03em' } }, 'Mobile Experience'),
-          e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 3 } }, 'Wintrail is a progressive web app — open it in any mobile browser for the full experience')),
-        e('a', { href: window.location.origin, target: '_blank', rel: 'noreferrer', style: { display: 'inline-flex', alignItems: 'center', gap: 9, padding: '11px 18px', borderRadius: 13, background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 14, textDecoration: 'none', boxShadow: 'var(--shadow)', flexShrink: 0 } },
-          e('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M7 3h10v18H7z M10 18h4' })),
-          'Open on your phone')),
-      e('div', { style: { display: 'flex', gap: 16, padding: '14px 20px', borderRadius: 16, background: 'var(--blue-soft)', border: '1px solid var(--border)', alignItems: 'center', flexWrap: 'wrap' } },
-        e('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--blue)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z' }), e('path', { d: 'M12 8v4l2 2' })),
-        e('span', { style: { fontSize: 14, color: 'var(--text)', flex: 1 } }, e('b', {}, 'How to install: '), 'Open ', e('b', {}, window.location.origin), ' on your phone → tap Share → "Add to Home Screen". Works on iPhone (Safari) and Android (Chrome).')),
-      e('div', { style: { display: 'flex', gap: 32, flexWrap: 'wrap' } },
-        this.phone('Home', home, 0),
-        this.phone('Roadmap', roadmap, 1),
-        this.phone('Planner', planner, 2),
-        this.phone('AI Mentor', mentor, 3)))
+    // Store badge SVGs
+    const appleBadge = e('svg', { viewBox: '0 0 120 40', width: 140, height: 47, xmlns: 'http://www.w3.org/2000/svg' },
+      e('rect', { width: 120, height: 40, rx: 7, fill: '#000' }),
+      e('path', { d: 'M26.5 20c0-3.3 2.7-4.9 2.8-5C27.6 13.3 25.8 13 25 13c-1.7-.2-3.4 1-4.3 1s-2.2-1-3.7-1c-1.9 0-3.7 1.1-4.6 2.8-2 3.4-.5 8.5 1.4 11.3.9 1.4 2 2.9 3.4 2.8 1.4-.1 1.9-.9 3.5-.9s2.1.9 3.5.8c1.5 0 2.4-1.4 3.3-2.7.7-.9 1.2-2 1.5-3.2-2.1-.8-3-3.1-3-4.9z', fill: '#fff' }),
+      e('path', { d: 'M24.3 11.4c.8-1 1.3-2.3 1.2-3.7-1.2.1-2.7.8-3.5 1.8-.8.9-1.4 2.2-1.2 3.5 1.3.1 2.7-.6 3.5-1.6z', fill: '#fff' }),
+      e('text', { x: 38, y: 15, fill: 'rgba(255,255,255,0.7)', fontSize: 7, fontFamily: 'system-ui,sans-serif' }, 'Download on the'),
+      e('text', { x: 37, y: 27, fill: '#fff', fontSize: 14, fontWeight: 'bold', fontFamily: 'system-ui,sans-serif' }, 'App Store')
+    )
+
+    const googleBadge = e('svg', { viewBox: '0 0 135 40', width: 158, height: 47, xmlns: 'http://www.w3.org/2000/svg' },
+      e('rect', { width: 135, height: 40, rx: 7, fill: '#000' }),
+      e('text', { x: 42, y: 14, fill: 'rgba(255,255,255,0.7)', fontSize: 7, fontFamily: 'system-ui,sans-serif' }, 'GET IT ON'),
+      e('text', { x: 40, y: 28, fill: '#fff', fontSize: 14, fontWeight: 'bold', fontFamily: 'system-ui,sans-serif' }, 'Google Play'),
+      e('g', { transform: 'translate(12,10)' },
+        e('path', { d: 'M2 0l12 10L2 20V0z', fill: '#4FC3F7' }),
+        e('path', { d: 'M2 0l7 7-7 3V0z', fill: '#29B6F6' }),
+        e('path', { d: 'M2 20l7-7 7 7H2z', fill: '#1565C0' }),
+        e('path', { d: 'M14 10L2 20l7-7 5-3z', fill: '#0D47A1' }),
+        e('path', { d: 'M2 0l7 7 5-3L2 0z', fill: '#00E676' }),
+      )
+    )
+
+    return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 28 } },
+      // Header
+      e('div', {},
+        e('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-.03em' } }, 'Get the App'),
+        e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 4 } }, 'WinTrail AI is available on iOS and Android. Download the app to learn on the go.')
+      ),
+      // Store download cards
+      e('div', { style: { display: 'flex', gap: 16, flexWrap: 'wrap' } },
+        // iOS App Store card
+        e('div', { style: { flex: 1, minWidth: 240, borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-sm)' } },
+          e('div', { style: { display: 'flex', alignItems: 'center', gap: 14 } },
+            e('div', { style: { width: 52, height: 52, borderRadius: 14, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } },
+              e('svg', { width: 28, height: 28, viewBox: '0 0 24 24', fill: 'white' },
+                e('path', { d: 'M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z' })
+              )
+            ),
+            e('div', {},
+              e('div', { style: { fontSize: 16, fontWeight: 700 } }, 'iOS App'),
+              e('div', { style: { fontSize: 13, color: 'var(--muted)', marginTop: 2 } }, 'iPhone & iPad')
+            )
+          ),
+          e('div', { style: { fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 } }, 'Requires iOS 16 or later. Available on the App Store.'),
+          e('button', { disabled: true, style: { opacity: 0.5, cursor: 'not-allowed', border: 'none', background: 'transparent', padding: 0, textAlign: 'left' } }, appleBadge),
+          e('div', { style: { fontSize: 11, color: 'var(--subtle)', fontStyle: 'italic' } }, 'Coming soon — link will be added once approved on the App Store')
+        ),
+        // Google Play card
+        e('div', { style: { flex: 1, minWidth: 240, borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', padding: '24px', display: 'flex', flexDirection: 'column', gap: 16, boxShadow: 'var(--shadow-sm)' } },
+          e('div', { style: { display: 'flex', alignItems: 'center', gap: 14 } },
+            e('div', { style: { width: 52, height: 52, borderRadius: 14, background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } },
+              e('svg', { width: 28, height: 28, viewBox: '0 0 24 24', fill: 'white' },
+                e('path', { d: 'M3 20.5v-17c0-.83.94-1.3 1.6-.8l14 8.5c.6.37.6 1.23 0 1.6l-14 8.5c-.66.5-1.6.03-1.6-.8z' })
+              )
+            ),
+            e('div', {},
+              e('div', { style: { fontSize: 16, fontWeight: 700 } }, 'Android App'),
+              e('div', { style: { fontSize: 13, color: 'var(--muted)', marginTop: 2 } }, 'Android phones & tablets')
+            )
+          ),
+          e('div', { style: { fontSize: 13, color: 'var(--muted)', lineHeight: 1.5 } }, 'Requires Android 8.0 or later. Available on Google Play.'),
+          e('button', { disabled: true, style: { opacity: 0.5, cursor: 'not-allowed', border: 'none', background: 'transparent', padding: 0, textAlign: 'left' } }, googleBadge),
+          e('div', { style: { fontSize: 11, color: 'var(--subtle)', fontStyle: 'italic' } }, 'Coming soon — link will be added once approved on Google Play')
+        )
+      ),
+      // Divider
+      e('div', { style: { borderTop: '1px solid var(--border)', paddingTop: 24 } },
+        e('div', { style: { fontSize: 15, fontWeight: 700, marginBottom: 16 } }, 'App preview'),
+        e('div', { style: { display: 'flex', gap: 32, flexWrap: 'wrap' } },
+          this.phone('Home', home, 0),
+          this.phone('Roadmap', roadmap, 1),
+          this.phone('Planner', planner, 2),
+          this.phone('AI Mentor', mentor, 3))
+      )
+    )
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -2767,7 +2826,7 @@ export default class LearnFlow extends React.Component {
           inp('password', s.authPassword, (ev) => this.setState({ authPassword: ev.target.value }), '••••••••', { onKeyDown: (ev) => ev.key === 'Enter' && this.doAuth(), autoComplete: isLogin ? 'current-password' : 'new-password' })
         ),
         s.authError && e('div', { style: { fontSize: 13, color: '#EF4444', padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.2)' } }, s.authError),
-        s.authResetSent && e('div', { style: { fontSize: 13, color: 'var(--emerald)', padding: '10px 14px', borderRadius: 10, background: 'rgba(16,185,129,.1)' } }, '✉️ Password reset email sent — check your inbox'),
+        s.authResetSent && e('div', { style: { fontSize: 13, color: 'var(--emerald)', padding: '10px 14px', borderRadius: 10, background: 'rgba(16,185,129,.1)' } }, '✉️ Password reset email sent check your inbox'),
         e('button', { onClick: () => { haptic(); this.doAuth() }, disabled: s.authLoading, style: { width: '100%', padding: 16, borderRadius: 14, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--blue-ink))', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', marginTop: 4, opacity: s.authLoading ? .7 : 1, fontFamily: 'inherit' } },
           s.authLoading ? 'Loading…' : (isLogin ? 'Sign in' : 'Create account')
         ),
@@ -2797,7 +2856,7 @@ export default class LearnFlow extends React.Component {
     const overallPct = phases.length ? Math.round(phases.map((_, i) => this._phasePct(i)).reduce((a, b) => a + b, 0) / phases.length) : 0
     const curPhase = rm ? rm.phases?.[this._currentPhaseIdx()] : null
     const mentorMsg = curPhase
-      ? `Focus on ${curPhase.title} — ${this._phasePct(this._currentPhaseIdx())}% complete. ${curPhase.sub || ''}`
+      ? `Focus on ${curPhase.title} ${this._phasePct(this._currentPhaseIdx())}% complete. ${curPhase.sub || ''}`
       : 'Generate your roadmap to get personalised daily guidance from Mentor AI.'
     const hr = new Date().getHours()
     const greeting = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening'
@@ -2850,7 +2909,7 @@ export default class LearnFlow extends React.Component {
               )
             )
           )
-        : e('div', { style: { padding: '16px 0', fontSize: 14, color: 'var(--muted)', marginBottom: 12 } }, 'No tasks yet — generate your roadmap first.'),
+        : e('div', { style: { padding: '16px 0', fontSize: 14, color: 'var(--muted)', marginBottom: 12 } }, 'No tasks yet generate your roadmap first.'),
       // Mentor AI suggestion card
       e('div', { onClick: () => this.setState({ mobileTab: 'mentor' }), style: { borderRadius: 16, padding: '14px 16px', background: 'var(--blue-soft)', border: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' } },
         e('div', { style: { width: 28, height: 28, borderRadius: 9, flexShrink: 0, background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
@@ -2937,7 +2996,7 @@ export default class LearnFlow extends React.Component {
               )
             ),
             e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 8 } }, 'No roadmap yet'),
-            e('div', { style: { fontSize: 14, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.5 } }, 'Build a personalised AI learning roadmap\nfor any topic — in under 30 seconds'),
+            e('div', { style: { fontSize: 14, color: 'var(--muted)', marginBottom: 32, lineHeight: 1.5 } }, 'Build a personalised AI learning roadmap\nfor any topic in under 30 seconds'),
             e('button', { onClick: () => { haptic(); this.freshOnboarding()() }, style: { padding: '16px 36px', borderRadius: 16, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--blue-ink))', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 24px rgba(37,99,235,.3)', fontFamily: 'inherit' } },
               '✦  Build my roadmap'
             )
@@ -2972,7 +3031,7 @@ export default class LearnFlow extends React.Component {
               )
             )
           )
-        : e('div', { style: { textAlign: 'center', padding: '36px 0', fontSize: 14, color: 'var(--muted)' } }, 'No sessions yet — generate your roadmap first.'),
+        : e('div', { style: { textAlign: 'center', padding: '36px 0', fontSize: 14, color: 'var(--muted)' } }, 'No sessions yet generate your roadmap first.'),
       // Inline add form
       isAdding
         ? e('div', { style: { borderRadius: 14, border: '1.5px solid var(--blue)', padding: '14px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 } },
@@ -3566,7 +3625,7 @@ export default class LearnFlow extends React.Component {
     const allCourses = phases.flatMap((p, pi) =>
       (p.courses || []).map((c) => {
         const [titlePart, urlPart] = c.split(' | ')
-        const dashIdx = titlePart.lastIndexOf(' — ')
+        const dashIdx = titlePart.lastIndexOf(' ')
         const title = dashIdx >= 0 ? titlePart.slice(0, dashIdx).trim() : titlePart.trim()
         const platform = dashIdx >= 0 ? titlePart.slice(dashIdx + 3).trim() : ''
         const url = urlPart?.trim()
