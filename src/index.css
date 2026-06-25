@@ -45,7 +45,9 @@ body { margin: 0; }
 @keyframes lf-blink { 0%,100%{opacity:.2} 50%{opacity:1} }
 @keyframes lf-rise { from { transform: scaleY(.0); } to { transform: scaleY(1); } }
 
-.lf-screen { animation: lf-fade .45s cubic-bezier(.22,1,.36,1) both; }
+:root { --lf-motion: ; } /* overridden to 0s when reduce-motion is on */
+.lf-screen { animation: lf-fade var(--lf-motion, .45s) cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) { :root { --lf-motion: 0s; } }
 .lf-scroll::-webkit-scrollbar { width:10px; height:10px; }
 .lf-scroll::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:99px; border:3px solid transparent; background-clip:padding-box; }
 .lf-nav-item:hover { background: var(--surface-2) !important; }

@@ -58,6 +58,7 @@ export default class LearnFlow extends React.Component {
     authPassword: '',
     authError: '',
     authLoading: false,
+    authResetSent: false,
     sessionLoading: true,
     obCustom: '',       // custom topic text in onboarding step 1
     settings: {
@@ -103,12 +104,13 @@ export default class LearnFlow extends React.Component {
         if (saved.roadmap) patch.roadmap = saved.roadmap
         if (saved.chatMsgs && saved.chatMsgs.length) patch.chatMsgs = saved.chatMsgs
         if (saved.obData && saved.obData.topic) { patch.obData = saved.obData; patch.obPhase = 'done' }
-        if (saved.tasks) {
+        if (saved.tasks || saved.roadmap) {
           const todayIso = new Date().toISOString().slice(0, 10)
-          // New day → reset done flags so tasks feel fresh each morning
-          patch.tasks = saved.progress?.lastDate !== todayIso
-            ? saved.tasks.map((t) => ({ ...t, done: false }))
-            : saved.tasks
+          if (saved.progress?.lastDate !== todayIso && saved.roadmap) {
+            // New day → rotate tasks from current phase (done after setState via timeout)
+            this._pendingTaskRefresh = saved.roadmap
+          }
+          patch.tasks = saved.tasks ? saved.tasks.map((t) => ({ ...t, done: false })) : null
         }
         if (saved.progress) patch.progress = { ...{ streak: 0, hoursStudied: 0, lastDate: null, dates: [], phaseProgress: {} }, ...saved.progress }
         if (saved.userName) patch.userName = saved.userName
@@ -121,10 +123,22 @@ export default class LearnFlow extends React.Component {
         if (saved.screen && !['landing', 'onboarding', 'auth'].includes(saved.screen)) patch.screen = saved.screen
         if (Object.keys(patch).length) this.setState(patch)
       }
+      // Rotate daily tasks if it's a new day
+      if (this._pendingTaskRefresh) {
+        const rm = this._pendingTaskRefresh; this._pendingTaskRefresh = null
+        setTimeout(() => {
+          const fresh = this._generateDailyTasks(rm)
+          if (fresh) this.setState({ tasks: fresh })
+        }, 50)
+      }
     } catch { /* ignore */ }
   }
 
   componentDidUpdate(_, prevState) {
+    // Apply reduce-motion to DOM when setting changes
+    if (this.state.settings.reduceMotion !== prevState.settings?.reduceMotion) {
+      document.documentElement.style.setProperty('--lf-motion', this.state.settings.reduceMotion ? '0s' : '')
+    }
     if (this._saveTimer) clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       try {
@@ -309,6 +323,26 @@ export default class LearnFlow extends React.Component {
     const weeks = phase.numWeeks || Math.round(rm.totalWeeks / rm.phases.length) || 4
     const expected = weeks * hpd * 5  // 5 study days per week
     return Math.min(100, Math.round(done / expected * 100))
+  }
+
+  _generateDailyTasks(rm) {
+    if (!rm) return null
+    const curIdx = this._currentPhaseIdx()
+    const phase = rm.phases?.[curIdx]
+    if (!phase) return rm.todaysTasks || null
+    // Build a varied pool from phase content
+    const pool = [
+      ...(rm.todaysTasks || []).map((t) => ({ ...t, done: false })),
+      ...(phase.courses || []).slice(0, 3).map((c) => ({ t: 'Study: ' + c.split(' | ')[0].split(' — ')[0].trim(), d: '45 min', done: false })),
+      ...(phase.skills || []).slice(0, 4).map((s) => ({ t: 'Practice: ' + s, d: '20 min', done: false })),
+      ...(phase.projects || []).slice(0, 2).map((p) => ({ t: 'Work on: ' + p, d: '30 min', done: false })),
+    ]
+    if (!pool.length) return rm.todaysTasks || null
+    // Rotate by day-of-year so tasks feel different each day
+    const doy = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0)) / 86400000)
+    const start = doy % pool.length
+    const picked = [...pool.slice(start), ...pool.slice(0, start)].slice(0, 4)
+    return picked
   }
 
   _currentPhaseIdx() {
@@ -506,7 +540,14 @@ export default class LearnFlow extends React.Component {
         if (data.kanban_cards) patch.kanbanCards = data.kanban_cards
         if (data.expanded_skill_phases) patch.expandedSkillPhases = data.expanded_skill_phases
         if (Array.isArray(data.custom_goals)) patch.customGoals = data.custom_goals
-        this.setState(patch)
+        this.setState(patch, () => {
+          // Rotate tasks on new day after cloud restore
+          const todayIso = new Date().toISOString().slice(0, 10)
+          if (data.progress?.lastDate !== todayIso && this.state.roadmap) {
+            const fresh = this._generateDailyTasks(this.state.roadmap)
+            if (fresh) this.setState({ tasks: fresh })
+          }
+        })
       } else {
         this.setState({ screen: 'onboarding' })
       }
@@ -561,6 +602,21 @@ export default class LearnFlow extends React.Component {
       }
     } catch (err) {
       this.setState({ authLoading: false, authError: err.message || 'Something went wrong.' })
+    }
+  }
+
+  async doForgotPassword() {
+    const { authEmail } = this.state
+    if (!authEmail) { this.setState({ authError: 'Enter your email address first.' }); return }
+    this.setState({ authLoading: true, authError: '' })
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+        redirectTo: window.location.origin + '/?reset=true',
+      })
+      if (error) throw error
+      this.setState({ authLoading: false, authResetSent: true, authError: '' })
+    } catch (err) {
+      this.setState({ authLoading: false, authError: err.message || 'Could not send reset email.' })
     }
   }
 
@@ -1050,7 +1106,7 @@ export default class LearnFlow extends React.Component {
   }
 
   renderAuth(v) {
-    const { authMode, authEmail, authPassword, authError, authLoading } = this.state
+    const { authMode, authEmail, authPassword, authError, authLoading, authResetSent } = this.state
     const isSignUp = authMode === 'signup'
     return (
       <div className="lf-screen" style={S('min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--bg)')}>
@@ -1112,6 +1168,19 @@ export default class LearnFlow extends React.Component {
               >
                 {authLoading ? 'Please wait…' : (isSignUp ? 'Create account' : 'Sign in')}
               </button>
+              {!isSignUp && !authResetSent && (
+                <div style={S('text-align:center')}>
+                  <span
+                    onClick={() => this.doForgotPassword()}
+                    style={S('font-size:13.5px; color:var(--blue); cursor:pointer; font-weight:500')}
+                  >Forgot your password?</span>
+                </div>
+              )}
+              {authResetSent && (
+                <div style={S('padding:11px 14px; border-radius:11px; background:var(--emerald-soft); border:1px solid var(--emerald); font-size:13.5px; color:var(--text); text-align:center')}>
+                  ✉️ Reset link sent — check your inbox, then sign in.
+                </div>
+              )}
             </div>
 
             <div style={S('margin-top:20px; text-align:center; font-size:14px; color:var(--muted)')}>

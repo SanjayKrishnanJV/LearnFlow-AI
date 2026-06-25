@@ -45,7 +45,7 @@ Return ONLY a JSON object (no markdown fences, no extra text) with this exact st
       "weeks": "Weeks 1–N",
       "numWeeks": <integer>,
       "skills": ["skill 1", "skill 2", "skill 3", "skill 4"],
-      "courses": ["Course — Platform", "Course — Platform"],
+      "courses": ["Course Name — Platform | https://official-url-if-known-else-omit-pipe-and-url", "Course Name — Platform | https://url-or-omit"]
       "projects": ["Hands-on project description", "Hands-on project description"],
       "assessment": "<exam name or capstone description>"
     }
@@ -61,7 +61,7 @@ Return ONLY a JSON object (no markdown fences, no extra text) with this exact st
 
 Rules:
 - 3–5 phases that progress logically from the learner's current level to their stated goal
-- Each phase: 4 specific skills, 2–3 real courses (if user provided URLs/links above, use those exact courses first; otherwise use real platforms: Microsoft Learn, Coursera, A Cloud Guru, Pluralsight, Udemy, etc.), 2–3 hands-on projects, one clear assessment
+- Each phase: 4 specific skills, 2–3 real courses. Format each course as "Course Name — Platform | URL" where URL is the official course/certification page (e.g. https://learn.microsoft.com/..., https://www.coursera.org/..., https://acloudguru.com/...). If user provided URLs above, use those first. Omit the " | URL" part only if you genuinely don't know the URL — do NOT guess. Use real platforms: Microsoft Learn, Coursera, A Cloud Guru, Pluralsight, Udemy, edX, freeCodeCamp, etc.
 - If user provided certification exam dates or class schedules, incorporate those exact dates into milestones and totalWeeks/targetDate
 - milestones: 3–5 key checkpoints with realistic dates (use user-provided dates if given)
 - todaysTasks: 3–4 concrete day-1 starter tasks appropriate for the learner's current level
