@@ -648,8 +648,13 @@ export default class LearnFlow extends React.Component {
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
         if (error) throw error
+        // Block saves until loadFromSupabase restores real data — prevents the
+        // brief window between setState(user) and loadFromSupabase completing from
+        // saving an empty roadmap over the user's existing Supabase data.
+        this._dataLoaded = false
         this.setState({ user: data.user, authEmail: '', authPassword: '' })
         await this.loadFromSupabase(data.user.id)
+        this._dataLoaded = true
         this.setState({ authLoading: false })
       }
     } catch (err) {
@@ -673,6 +678,13 @@ export default class LearnFlow extends React.Component {
   }
 
   async doSignOut() {
+    // Cancel any pending debounced save, then force an immediate flush so the
+    // roadmap is in Supabase before we clear state and localStorage.
+    if (this._saveTimer) { clearTimeout(this._saveTimer); this._saveTimer = null }
+    if (this._syncTimer) { clearTimeout(this._syncTimer); this._syncTimer = null }
+    await this._saveToSupabase()
+    // Block further saves — the cleared state below must not overwrite Supabase.
+    this._dataLoaded = false
     if (supabase) await supabase.auth.signOut().catch(() => {})
     localStorage.removeItem('lf_state')
     this.setState({
