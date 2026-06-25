@@ -42,12 +42,16 @@ async function registerPushNotifications(platform) {
       if (!supabase) return
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      // Determine if this is a sandbox (dev) build
-      const sandbox = import.meta.env.DEV || import.meta.env.MODE !== 'production'
-      await supabase.from('device_tokens').upsert(
+      // sandbox=true for Debug/Xcode builds (which use api.sandbox.push.apple.com).
+      // The VITE_APNS_SANDBOX env var is set in .env.mobile for dev builds.
+      // Falls back to true so dev tokens aren't accidentally sent to production APNs.
+      const sandbox = (import.meta.env.VITE_APNS_SANDBOX ?? 'true') !== 'false'
+      console.log('[WinTrail] Saving push token', `…${token.slice(-8)}`, 'sandbox:', sandbox)
+      const { error } = await supabase.from('device_tokens').upsert(
         { user_id: user.id, token, platform, sandbox },
         { onConflict: 'user_id,token' }
-      ).catch(() => {})
+      )
+      if (error) console.error('[WinTrail] Failed to save push token:', error.message)
     })
 
     PushNotifications.addListener('registrationError', (err) => {

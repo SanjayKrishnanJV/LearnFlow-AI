@@ -101,20 +101,26 @@ export default async function handler(req, res) {
     .select('token, platform, sandbox')
     .eq('user_id', user_id)
 
+  console.log('[notify] user_id:', user_id, '| tokens found:', tokens?.length ?? 0, '| db error:', error?.message ?? 'none')
+
   if (error) return res.status(500).json({ error: error.message })
-  if (!tokens?.length) return res.json({ sent: 0, message: 'No registered devices found.' })
+  if (!tokens?.length) return res.json({ sent: 0, message: 'No registered devices found. Make sure you opened the app on your phone while logged in with the same account.' })
 
   const jwt      = makeApnsJwt()
   const bundleId = process.env.APNS_BUNDLE_ID || 'com.wintrail.app'
+  // Use APNS_SANDBOX env var as the source of truth — it matches the Xcode build type
+  const useSandbox = process.env.APNS_SANDBOX === 'true'
   const results  = []
 
-  for (const { token, platform, sandbox } of tokens) {
+  for (const { token, platform } of tokens) {
     if (platform !== 'ios') continue
     try {
-      const useSandbox = sandbox ?? (process.env.APNS_SANDBOX === 'true')
+      console.log('[notify] sending APNs to', `…${token.slice(-8)}`, 'sandbox:', useSandbox)
       const r = await sendApns(token, jwt, bundleId, useSandbox)
+      console.log('[notify] APNs response:', r.status, r.data)
       results.push({ ok: r.status === 200, status: r.status, token: `…${token.slice(-8)}` })
     } catch (err) {
+      console.error('[notify] APNs error:', err.message)
       results.push({ ok: false, error: err.message, token: `…${token.slice(-8)}` })
     }
   }
