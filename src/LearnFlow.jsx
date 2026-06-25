@@ -88,6 +88,10 @@ export default class LearnFlow extends React.Component {
       groundedAnswers: true, proactiveCoaching: true,
       accentColor: 'blue',
     },
+    chatSessions: [],
+    activeChatSessionId: null,
+    confirmDelete: null,
+    showChatHistory: false,
   }
 
   selectPhase(i) { return () => this.setState({ roadmapPhase: i }) }
@@ -100,6 +104,11 @@ export default class LearnFlow extends React.Component {
     // This guarantees the user always sees their data on refresh, regardless of whether
     // Supabase is slow, fails, or hasn't responded yet.
     this._restoreLocal()
+
+    this._onVisible = () => {
+      if (!document.hidden && this.state.user) this.loadFromSupabase(this.state.user.id)
+    }
+    document.addEventListener('visibilitychange', this._onVisible)
 
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -147,6 +156,7 @@ export default class LearnFlow extends React.Component {
         if (saved.kanbanCards) patch.kanbanCards = saved.kanbanCards
         if (saved.expandedSkillPhases) patch.expandedSkillPhases = saved.expandedSkillPhases
         if (Array.isArray(saved.customGoals)) patch.customGoals = saved.customGoals
+        if (Array.isArray(saved.chatSessions)) patch.chatSessions = saved.chatSessions
         if (saved.screen && !['landing', 'onboarding', 'auth'].includes(saved.screen)) patch.screen = saved.screen
         if (Object.keys(patch).length) this.setState(patch, () => {
           if (patch.settings?.accentColor) this._applyAccent(patch.settings.accentColor)
@@ -173,8 +183,8 @@ export default class LearnFlow extends React.Component {
     if (this._saveTimer) clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       try {
-        const { theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases, customGoals } = this.state
-        localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases, customGoals }))
+        const { theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases, customGoals, chatSessions } = this.state
+        localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases, customGoals, chatSessions }))
       } catch { /* ignore */ }
     }, 300)
     // Debounced Supabase sync — only fires when user is logged in
@@ -190,6 +200,7 @@ export default class LearnFlow extends React.Component {
     if (this._saveTimer) clearTimeout(this._saveTimer)
     if (this._syncTimer) clearTimeout(this._syncTimer)
     if (this._authSub) this._authSub.unsubscribe()
+    if (this._onVisible) document.removeEventListener('visibilitychange', this._onVisible)
   }
 
   go(screen) {
@@ -432,8 +443,28 @@ export default class LearnFlow extends React.Component {
     this.setState((s) => {
       const saved = s.savedRoadmaps.filter((r) => r.id !== id)
       const roadmap = s.roadmap?.id === id ? (saved[0] || null) : s.roadmap
-      return { savedRoadmaps: saved, roadmap }
-    })
+      return { savedRoadmaps: saved, roadmap, confirmDelete: null }
+    }, () => this._saveToSupabase())
+  }
+
+  saveCurrentChatSession() {
+    const msgs = this.state.chatMsgs
+    if (msgs.length < 2) return
+    const firstUser = msgs.find((m) => m.role === 'user')
+    const title = firstUser ? firstUser.text.slice(0, 50) : 'Conversation'
+    const session = { id: 'chat_' + Date.now(), title, createdAt: new Date().toISOString(), msgs }
+    this.setState((s) => ({ chatSessions: [session, ...s.chatSessions], chatMsgs: [], activeChatSessionId: null }))
+  }
+
+  loadChatSession(id) {
+    const session = this.state.chatSessions.find((s) => s.id === id)
+    if (!session) return
+    this.setState({ chatMsgs: session.msgs, activeChatSessionId: id })
+  }
+
+  deleteChatSession(id) {
+    this.setState((s) => ({ chatSessions: s.chatSessions.filter((c) => c.id !== id), confirmDelete: null }),
+      () => this._saveToSupabase())
   }
 
   // ---------- PLANNER ----------
@@ -573,8 +604,9 @@ export default class LearnFlow extends React.Component {
         if (data.user_name) patch.userName = data.user_name
         if (data.ob_data && data.ob_data.topic) { patch.obData = data.ob_data; patch.obPhase = 'done' }
         if (data.chat_msgs && data.chat_msgs.length) patch.chatMsgs = data.chat_msgs
+        if (Array.isArray(data.chat_sessions)) patch.chatSessions = data.chat_sessions
         if (data.settings) patch.settings = { ...this.state.settings, ...data.settings }
-        if (Array.isArray(data.saved_roadmaps) && data.saved_roadmaps.length) patch.savedRoadmaps = data.saved_roadmaps
+        if (Array.isArray(data.saved_roadmaps)) patch.savedRoadmaps = data.saved_roadmaps
         if (data.planner_items && typeof data.planner_items === 'object') patch.plannerItems = data.planner_items
         if (data.kanban_cards) patch.kanbanCards = data.kanban_cards
         if (data.expanded_skill_phases) patch.expandedSkillPhases = data.expanded_skill_phases
@@ -627,7 +659,7 @@ export default class LearnFlow extends React.Component {
   // the roadmap column in Supabase is left untouched.
   async _saveToSupabase() {
     if (!supabase || !this.state.user) return
-    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings, plannerItems, kanbanCards, expandedSkillPhases } = this.state
+    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings, plannerItems, kanbanCards, expandedSkillPhases, chatSessions } = this.state
     const payload = {
       id: this.state.user.id,
       tasks, progress, settings,
@@ -641,10 +673,9 @@ export default class LearnFlow extends React.Component {
       updated_at: new Date().toISOString(),
     }
     // Only include roadmap when we actually have one — never overwrite with null
-    if (roadmap) {
-      payload.roadmap = roadmap
-      payload.saved_roadmaps = savedRoadmaps
-    }
+    if (roadmap) payload.roadmap = roadmap
+    payload.saved_roadmaps = savedRoadmaps   // Always save so deletions persist
+    payload.chat_sessions = chatSessions
     try {
       const { error } = await supabase.from('user_data').upsert(payload)
       if (error) console.warn('[LearnFlow] Supabase sync error:', error.message)
@@ -1729,11 +1760,21 @@ export default class LearnFlow extends React.Component {
             const isActive = r.id === rm.id
             return e('div', { key: r.id, style: { display: 'flex', alignItems: 'center', gap: 0, borderRadius: 10, border: '1.5px solid ' + (isActive ? 'var(--blue)' : 'var(--border)'), background: isActive ? 'var(--blue-soft)' : 'var(--surface)', overflow: 'hidden' } },
               e('button', { className: 'lf-btn', onClick: () => this.switchRoadmap(r.id), style: { padding: '7px 13px', border: 'none', background: 'transparent', color: isActive ? 'var(--blue-ink)' : 'var(--muted)', fontWeight: isActive ? 700 : 500, fontSize: 13, cursor: 'pointer' } }, r.headline),
-              !isActive && e('button', { className: 'lf-btn', onClick: () => this.deleteRoadmap(r.id), style: { padding: '7px 8px', border: 'none', background: 'transparent', color: 'var(--subtle)', fontSize: 13, cursor: 'pointer', lineHeight: 1 } }, '×'))
+              !isActive && e('button', { className: 'lf-btn', onClick: () => this.setState({ confirmDelete: { type: 'roadmap', id: r.id, label: r.headline || 'this roadmap' } }), style: { padding: '7px 8px', border: 'none', background: 'transparent', color: 'var(--subtle)', fontSize: 13, cursor: 'pointer', lineHeight: 1 } }, '×'))
           })),
         e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' } }, '+ New roadmap')),
       saved.length === 1 && e('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
         e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer' } }, '+ Build another roadmap')),
+      this.state.confirmDelete && e('div', { key: 'confirm-modal', style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+        e('div', { style: { background: 'var(--surface)', borderRadius: 20, padding: '28px', maxWidth: 400, width: '100%', margin: '0 16px', boxShadow: 'var(--shadow-lg)' } },
+          e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 8 } }, 'Delete roadmap?'),
+          e('div', { style: { fontSize: 14, color: 'var(--muted)', marginBottom: 24 } }, this.state.confirmDelete.label),
+          e('div', { style: { display: 'flex', gap: 10 } },
+            e('button', { className: 'lf-btn', onClick: () => this.deleteRoadmap(this.state.confirmDelete.id), style: { flex: 1, padding: '12px', borderRadius: 12, border: 'none', background: '#EF4444', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' } }, 'Delete'),
+            e('button', { className: 'lf-btn', onClick: () => this.setState({ confirmDelete: null }), style: { flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 15, fontWeight: 600, cursor: 'pointer' } }, 'Cancel')
+          )
+        )
+      ),
       e('div', { style: { borderRadius: 24, padding: '28px 30px', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', boxShadow: 'var(--shadow)', position: 'relative', overflow: 'hidden' } },
         e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 } },
           e('div', {},
@@ -2610,7 +2651,8 @@ export default class LearnFlow extends React.Component {
         tab === 'skilltree' && this.buildNativeSkilltree(),
         tab === 'library'   && this.buildNativeLibrary(),
         tab === 'goals'     && this.buildNativeGoals(),
-        tab === 'more'      && this.buildNativeMore()
+        tab === 'more'      && this.buildNativeMore(),
+        tab === 'profile'   && this.buildNativeProfile()
       ),
       this.buildNativeTabBar(tab)
     )
@@ -2762,6 +2804,15 @@ export default class LearnFlow extends React.Component {
     const overallPct = phases.length ? Math.round(phases.map((p) => p.pct).reduce((a, b) => a + b, 0) / phases.length) : 0
 
     return e('div', { style: { padding: '0 20px 24px' } },
+      // Confirmation modal
+      this.state.confirmDelete && e('div', { style: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 100, display: 'flex', alignItems: 'flex-end' } },
+        e('div', { style: { background: 'var(--surface)', borderRadius: '20px 20px 0 0', padding: '24px 20px', width: '100%' } },
+          e('div', { style: { fontSize: 18, fontWeight: 700, marginBottom: 8 } }, 'Delete roadmap?'),
+          e('div', { style: { fontSize: 14, color: 'var(--muted)', marginBottom: 20 } }, this.state.confirmDelete.label),
+          e('button', { onClick: () => this.deleteRoadmap(this.state.confirmDelete.id), style: { width: '100%', padding: 14, borderRadius: 14, border: 'none', background: '#EF4444', color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer', marginBottom: 10, fontFamily: 'inherit' } }, 'Delete'),
+          e('button', { onClick: () => this.setState({ confirmDelete: null }), style: { width: '100%', padding: 14, borderRadius: 14, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text)', fontSize: 16, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } }, 'Cancel')
+        )
+      ),
       // Header row
       e('div', { style: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 20 } },
         e('div', {},
@@ -2790,8 +2841,24 @@ export default class LearnFlow extends React.Component {
                 i === curIdx && p.sub && e('div', { style: { fontSize: 13, color: 'var(--muted)', marginTop: 10, lineHeight: 1.5 } }, p.sub)
               )
             ),
-            // Other saved roadmaps
-            savedRms.length > 1 && e('div', { style: { marginTop: 8, fontSize: 13, color: 'var(--muted)', fontWeight: 600, textAlign: 'center' } }, `+${savedRms.length - 1} other roadmap${savedRms.length > 2 ? 's' : ''} saved`)
+            // All saved roadmaps list
+            savedRms.length > 1 && e('div', { style: { marginTop: 16 } },
+              e('div', { style: { fontSize: 11, fontWeight: 700, color: 'var(--muted)', letterSpacing: '.08em', marginBottom: 10 } }, 'SAVED ROADMAPS'),
+              e('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
+                savedRms.map((r) =>
+                  e('div', { key: r.id, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', borderRadius: 14, background: r.id === rm?.id ? 'var(--blue-soft)' : 'var(--surface)', border: '1px solid ' + (r.id === rm?.id ? 'var(--blue)' : 'var(--border)') } },
+                    e('div', { style: { flex: 1, minWidth: 0 } },
+                      e('div', { style: { fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, r.headline || 'Roadmap'),
+                      e('div', { style: { fontSize: 11, color: 'var(--muted)', marginTop: 2 } }, r.totalWeeks ? r.totalWeeks + ' weeks' : '')
+                    ),
+                    r.id !== rm?.id && e('button', { onClick: () => { haptic(); this.switchRoadmap(r.id) }, style: { padding: '7px 12px', borderRadius: 10, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0 } }, 'Switch'),
+                    e('button', { onClick: () => { haptic(); this.setState({ confirmDelete: { type: 'roadmap', id: r.id, label: r.headline || 'this roadmap' } }) }, style: { width: 32, height: 32, borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 } },
+                      e('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: '#EF4444', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6' }))
+                    )
+                  )
+                )
+              )
+            )
           )
         : e('div', { style: { textAlign: 'center', paddingTop: 56 } },
             e('div', { style: { width: 72, height: 72, borderRadius: 22, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' } },
@@ -2839,8 +2906,8 @@ export default class LearnFlow extends React.Component {
       // Inline add form
       isAdding
         ? e('div', { style: { borderRadius: 14, border: '1.5px solid var(--blue)', padding: '14px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 10 } },
-            e('input', { type: 'text', value: s.plannerAddText, onChange: (ev) => this.setState({ plannerAddText: ev.target.value }), placeholder: 'Session name…', autoFocus: true, style: { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } }),
-            e('input', { type: 'time', value: s.plannerAddTime, onChange: (ev) => this.setState({ plannerAddTime: ev.target.value }), style: { padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, outline: 'none', fontFamily: 'inherit' } }),
+            e('input', { type: 'text', value: s.plannerAddText, onChange: (ev) => this.setState({ plannerAddText: ev.target.value }), placeholder: 'Session name…', autoFocus: true, style: { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } }),
+            e('input', { type: 'time', value: s.plannerAddTime, onChange: (ev) => this.setState({ plannerAddTime: ev.target.value }), style: { padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, outline: 'none', fontFamily: 'inherit' } }),
             e('div', { style: { display: 'flex', gap: 8 } },
               e('button', { onClick: () => {
                   if (!s.plannerAddText.trim()) return
@@ -2858,16 +2925,51 @@ export default class LearnFlow extends React.Component {
 
   buildNativeMentor() {
     const s = this.state
+
+    // History view
+    if (s.showChatHistory) {
+      return e('div', { style: { height: '100%', display: 'flex', flexDirection: 'column' } },
+        e('div', { style: { padding: '0 20px 14px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', flexShrink: 0, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 } },
+          e('button', { onClick: () => this.setState({ showChatHistory: false }), style: { width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } },
+            e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--text)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M19 12H5M12 19l-7-7 7-7' }))
+          ),
+          e('div', { style: { fontSize: 18, fontWeight: 700 } }, 'Conversation History')
+        ),
+        e('div', { style: { flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px' } },
+          s.chatSessions.length === 0
+            ? e('div', { style: { textAlign: 'center', paddingTop: 56, color: 'var(--muted)', fontSize: 14 } }, 'No saved conversations yet')
+            : e('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
+                s.chatSessions.map((sess) =>
+                  e('div', { key: sess.id, style: { padding: '14px', borderRadius: 14, background: 'var(--surface)', border: '1px solid var(--border)' } },
+                    e('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 4 } }, sess.title),
+                    e('div', { style: { fontSize: 12, color: 'var(--muted)', marginBottom: 12 } }, new Date(sess.createdAt).toLocaleDateString()),
+                    e('div', { style: { display: 'flex', gap: 8 } },
+                      e('button', { onClick: () => { haptic(); this.loadChatSession(sess.id); this.setState({ showChatHistory: false }) }, style: { flex: 1, padding: '8px', borderRadius: 10, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } }, 'Resume'),
+                      e('button', { onClick: () => { haptic(); this.deleteChatSession(sess.id) }, style: { padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(239,68,68,.3)', background: 'rgba(239,68,68,.06)', color: '#EF4444', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } }, 'Delete')
+                    )
+                  )
+                )
+              )
+        )
+      )
+    }
+
     return e('div', { style: { height: '100%', display: 'flex', flexDirection: 'column' } },
       // Header
       e('div', { style: { padding: '0 20px 14px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)', flexShrink: 0, borderBottom: '1px solid var(--border)' } },
-        e('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
-          e('div', { style: { width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
-            e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1' }))
+        e('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } },
+          e('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } },
+            e('div', { style: { width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+              e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1' }))
+            ),
+            e('div', {},
+              e('div', { style: { fontSize: 16, fontWeight: 700 } }, 'Mentor AI'),
+              e('div', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Powered by Groq · Always available')
+            )
           ),
-          e('div', {},
-            e('div', { style: { fontSize: 16, fontWeight: 700 } }, 'Mentor AI'),
-            e('div', { style: { fontSize: 12, color: 'var(--muted)' } }, 'Powered by Groq · Always available')
+          e('div', { style: { display: 'flex', gap: 8 } },
+            s.chatMsgs.length >= 2 && e('button', { onClick: () => { haptic(); this.saveCurrentChatSession() }, style: { padding: '7px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } }, 'Save'),
+            e('button', { onClick: () => { haptic(); this.setState({ showChatHistory: true }) }, style: { padding: '7px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' } }, 'History' + (s.chatSessions.length > 0 ? ' (' + s.chatSessions.length + ')' : ''))
           )
         )
       ),
@@ -2909,7 +3011,7 @@ export default class LearnFlow extends React.Component {
       ),
       // Input
       e('div', { style: { padding: '10px 16px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)', borderTop: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'flex-end', flexShrink: 0, background: 'var(--bg)' } },
-        e('textarea', { value: s.chatInput, onChange: this.onChatInput.bind(this), onKeyDown: (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); this.doSend() } }, placeholder: 'Ask anything…', rows: 1, style: { flex: 1, padding: '11px 14px', borderRadius: 14, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 15, resize: 'none', fontFamily: 'inherit', outline: 'none', lineHeight: 1.4, maxHeight: 120 } }),
+        e('textarea', { value: s.chatInput, onChange: this.onChatInput.bind(this), onKeyDown: (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); this.doSend() } }, placeholder: 'Ask anything…', rows: 1, style: { flex: 1, padding: '11px 14px', borderRadius: 14, border: '1.5px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, resize: 'none', fontFamily: 'inherit', outline: 'none', lineHeight: 1.4, maxHeight: 120 } }),
         e('button', { onClick: () => { haptic(); this.doSend() }, disabled: s.chatTyping, style: { width: 44, height: 44, borderRadius: 13, border: 'none', background: 'var(--blue)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, opacity: s.chatTyping ? .5 : 1 } },
           e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.5, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M5 12h14M13 6l6 6-6 6' }))
         )
@@ -2936,7 +3038,15 @@ export default class LearnFlow extends React.Component {
         )
       )
 
+    const backHeader = (title) => e('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
+      e('button', { onClick: () => { haptic(); this.setState({ mobileTab: 'more' }) }, style: { width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } },
+        e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--text)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M19 12H5M12 19l-7-7 7-7' }))
+      ),
+      e('div', { style: { fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' } }, title)
+    )
+
     return e('div', { style: { padding: '0 20px 32px' } },
+      backHeader('Profile & Settings'),
       // Avatar + info
       e('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 8, marginBottom: 32 } },
         e('div', { style: { width: 84, height: 84, borderRadius: 28, background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 30, fontWeight: 800, color: '#fff', marginBottom: 14 } }, initials),
@@ -3014,7 +3124,7 @@ export default class LearnFlow extends React.Component {
       },
     ]
     // Highlight More tab when any sub-screen is active
-    const moreScreens = ['analytics', 'skilltree', 'library', 'goals', 'more']
+    const moreScreens = ['analytics', 'skilltree', 'library', 'goals', 'more', 'profile']
     return e('div', { style: { flexShrink: 0, display: 'flex', borderTop: '1px solid var(--border)', background: 'var(--surface)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' } },
       tabs.map((t) => {
         const active = t.id === 'more' ? moreScreens.includes(currentTab) : currentTab === t.id
@@ -3123,8 +3233,15 @@ export default class LearnFlow extends React.Component {
         e('div', { style: { fontSize: 11, color: 'var(--muted)', marginTop: 4 } }, label)
       )
 
+    const backHeader = (title) => e('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
+      e('button', { onClick: () => { haptic(); this.setState({ mobileTab: 'more' }) }, style: { width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } },
+        e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--text)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M19 12H5M12 19l-7-7 7-7' }))
+      ),
+      e('div', { style: { fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' } }, title)
+    )
+
     return e('div', { style: { padding: '0 20px 24px' } },
-      e('div', { style: { fontSize: 22, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 20 } }, 'Analytics'),
+      backHeader('Analytics'),
       // Stat cards
       e('div', { style: { display: 'flex', gap: 10, marginBottom: 20 } },
         statCard(prog.streak, 'Day streak', 'var(--amber)'),
@@ -3200,8 +3317,15 @@ export default class LearnFlow extends React.Component {
     const phases = rm.phases || []
     const curIdx = this._currentPhaseIdx()
 
+    const backHeader = (title) => e('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
+      e('button', { onClick: () => { haptic(); this.setState({ mobileTab: 'more' }) }, style: { width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } },
+        e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--text)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M19 12H5M12 19l-7-7 7-7' }))
+      ),
+      e('div', { style: { fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' } }, title)
+    )
+
     return e('div', { style: { padding: '0 20px 24px' } },
-      e('div', { style: { fontSize: 22, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 4 } }, 'Skill Tree'),
+      backHeader('Skill Tree'),
       e('div', { style: { fontSize: 13, color: 'var(--muted)', marginBottom: 20 } }, rm.headline),
       e('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
         phases.map((p, i) => {
@@ -3275,8 +3399,15 @@ export default class LearnFlow extends React.Component {
       })
     )
 
+    const backHeader = (title) => e('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
+      e('button', { onClick: () => { haptic(); this.setState({ mobileTab: 'more' }) }, style: { width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } },
+        e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--text)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M19 12H5M12 19l-7-7 7-7' }))
+      ),
+      e('div', { style: { fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' } }, title)
+    )
+
     return e('div', { style: { padding: '0 20px 24px' } },
-      e('div', { style: { fontSize: 22, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 4 } }, 'Library'),
+      backHeader('Library'),
       e('div', { style: { fontSize: 13, color: 'var(--muted)', marginBottom: 20 } }, allCourses.length + ' resources from your roadmap'),
       e('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
         allCourses.map((c, i) =>
@@ -3311,8 +3442,15 @@ export default class LearnFlow extends React.Component {
     const milestones = rm?.milestones || []
     const customGoals = s.customGoals || []
 
+    const backHeader = (title) => e('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 } },
+      e('button', { onClick: () => { haptic(); this.setState({ mobileTab: 'more' }) }, style: { width: 36, height: 36, borderRadius: 11, border: '1px solid var(--border)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' } },
+        e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--text)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M19 12H5M12 19l-7-7 7-7' }))
+      ),
+      e('div', { style: { fontSize: 20, fontWeight: 800, letterSpacing: '-.02em' } }, title)
+    )
+
     return e('div', { style: { padding: '0 20px 24px' } },
-      e('div', { style: { fontSize: 22, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 20 } }, 'Goals'),
+      backHeader('Goals'),
 
       // Roadmap milestones
       milestones.length > 0 && e('div', { style: { marginBottom: 24 } },
@@ -3355,7 +3493,7 @@ export default class LearnFlow extends React.Component {
       // Add goal form
       s.addingGoal
         ? e('div', { style: { borderRadius: 14, border: '1.5px solid var(--blue)', padding: '14px', display: 'flex', flexDirection: 'column', gap: 10 } },
-            e('input', { type: 'text', value: s.addGoalText, onChange: (ev) => this.setState({ addGoalText: ev.target.value }), placeholder: 'Goal description…', autoFocus: true, style: { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } }),
+            e('input', { type: 'text', value: s.addGoalText, onChange: (ev) => this.setState({ addGoalText: ev.target.value }), placeholder: 'Goal description…', autoFocus: true, style: { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 16, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } }),
             e('div', { style: { display: 'flex', gap: 8 } },
               e('button', { onClick: () => { this.addCustomGoal(); this.setState({ addingGoal: false }) }, style: { flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' } }, 'Add goal'),
               e('button', { onClick: () => this.setState({ addingGoal: false, addGoalText: '' }), style: { padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)', fontSize: 14, cursor: 'pointer', fontFamily: 'inherit' } }, 'Cancel')
