@@ -160,22 +160,16 @@ export default class LearnFlow extends React.Component {
         }, 50)
       }
     } catch { /* ignore */ }
-    // Always unlock saves — even when localStorage is empty (new user)
-    this._dataLoaded = true
   }
 
   componentDidUpdate(_, prevState) {
-    // Apply reduce-motion to DOM when setting changes
     if (this.state.settings.reduceMotion !== prevState.settings?.reduceMotion) {
       document.documentElement.style.setProperty('--lf-motion', this.state.settings.reduceMotion ? '0s' : '')
     }
-    // Apply accent colour when setting or theme changes
     if (this.state.settings.accentColor !== prevState.settings?.accentColor || this.state.theme !== prevState.theme) {
       this._applyAccent(this.state.settings.accentColor)
     }
-    // Only persist after initial data load is complete — prevents overwriting Supabase
-    // with empty state while loadFromSupabase() is still in-flight.
-    if (!this._dataLoaded) return
+    // Debounced localStorage save
     if (this._saveTimer) clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       try {
@@ -183,9 +177,11 @@ export default class LearnFlow extends React.Component {
         localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases, customGoals }))
       } catch { /* ignore */ }
     }, 300)
-    // Debounced Supabase sync (1 s) when logged in
-    if (this._syncTimer) clearTimeout(this._syncTimer)
-    this._syncTimer = setTimeout(() => this._saveToSupabase(), 1000)
+    // Debounced Supabase sync — only fires when user is logged in
+    if (this.state.user) {
+      if (this._syncTimer) clearTimeout(this._syncTimer)
+      this._syncTimer = setTimeout(() => this._saveToSupabase(), 1500)
+    }
   }
 
   componentWillUnmount() {
@@ -234,7 +230,10 @@ export default class LearnFlow extends React.Component {
                 roadmap: rm,
                 tasks: Array.isArray(data.todaysTasks) ? data.todaysTasks : null,
                 savedRoadmaps: [rm, ...s.savedRoadmaps],
-              }))
+              }), () => {
+                // Save roadmap to Supabase immediately — don't rely on the debounce
+                this._saveRoadmapNow()
+              })
             }
           })
           .catch(() => { /* no key or error — fall back to mock data silently */ })
@@ -606,23 +605,50 @@ export default class LearnFlow extends React.Component {
     }
   }
 
-  async _saveToSupabase() {
-    if (!supabase || !this.state.user || !this._dataLoaded) return
-    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings, plannerItems, kanbanCards, expandedSkillPhases } = this.state
+  // Immediate save — called right after roadmap is generated
+  async _saveRoadmapNow() {
+    if (!supabase || !this.state.user || !this.state.roadmap) return
+    const { roadmap, savedRoadmaps, userName, obData } = this.state
     try {
-      await supabase.from('user_data').upsert({
+      const { error } = await supabase.from('user_data').upsert({
         id: this.state.user.id,
-        roadmap, saved_roadmaps: savedRoadmaps, tasks, progress, settings,
-        planner_items: plannerItems,
-        kanban_cards: kanbanCards,
-        expanded_skill_phases: expandedSkillPhases,
-        custom_goals: this.state.customGoals,
+        roadmap,
+        saved_roadmaps: savedRoadmaps,
         user_name: userName,
         ob_data: obData,
-        chat_msgs: chatMsgs,
         updated_at: new Date().toISOString(),
       })
-    } catch (err) { console.warn('[LearnFlow] Supabase save failed:', err?.message) }
+      if (error) console.error('[LearnFlow] Roadmap save error:', error.message)
+    } catch (err) { console.error('[LearnFlow] Roadmap save failed:', err?.message) }
+  }
+
+  // Debounced full-state save — NEVER sends roadmap:null to the DB.
+  // If state.roadmap is null (e.g. during page load before Supabase returns),
+  // the roadmap column in Supabase is left untouched.
+  async _saveToSupabase() {
+    if (!supabase || !this.state.user) return
+    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings, plannerItems, kanbanCards, expandedSkillPhases } = this.state
+    const payload = {
+      id: this.state.user.id,
+      tasks, progress, settings,
+      planner_items: plannerItems,
+      kanban_cards: kanbanCards,
+      expanded_skill_phases: expandedSkillPhases,
+      custom_goals: this.state.customGoals,
+      user_name: userName,
+      ob_data: obData,
+      chat_msgs: chatMsgs,
+      updated_at: new Date().toISOString(),
+    }
+    // Only include roadmap when we actually have one — never overwrite with null
+    if (roadmap) {
+      payload.roadmap = roadmap
+      payload.saved_roadmaps = savedRoadmaps
+    }
+    try {
+      const { error } = await supabase.from('user_data').upsert(payload)
+      if (error) console.warn('[LearnFlow] Supabase sync error:', error.message)
+    } catch (err) { console.warn('[LearnFlow] Supabase sync failed:', err?.message) }
   }
 
   async doAuth() {
@@ -639,8 +665,6 @@ export default class LearnFlow extends React.Component {
         const resolvedName = authName.trim() || authEmail.split('@')[0]
         if (data.session) {
           localStorage.removeItem('lf_state')
-          // New user — no prior data to load, enable saves immediately
-          this._dataLoaded = true
           this.setState({ user: data.user, userName: resolvedName, authLoading: false, authName: '', authEmail: '', authPassword: '', screen: 'onboarding', obStep: 1, obData: { topic: '', level: '', goal: '', time: '', hasLinks: '', userLinks: '' }, obPhase: 'question', obGenIdx: 0, obCustom: '', roadmap: null, tasks: null, progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [] } })
         } else {
           this.setState({ authLoading: false, authError: '✉️ Check your inbox to confirm your account, then sign in.' })
@@ -648,13 +672,8 @@ export default class LearnFlow extends React.Component {
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
         if (error) throw error
-        // Block saves until loadFromSupabase restores real data — prevents the
-        // brief window between setState(user) and loadFromSupabase completing from
-        // saving an empty roadmap over the user's existing Supabase data.
-        this._dataLoaded = false
         this.setState({ user: data.user, authEmail: '', authPassword: '' })
         await this.loadFromSupabase(data.user.id)
-        this._dataLoaded = true
         this.setState({ authLoading: false })
       }
     } catch (err) {
@@ -678,13 +697,10 @@ export default class LearnFlow extends React.Component {
   }
 
   async doSignOut() {
-    // Cancel any pending debounced save, then force an immediate flush so the
-    // roadmap is in Supabase before we clear state and localStorage.
+    // Flush any pending saves before clearing session
     if (this._saveTimer) { clearTimeout(this._saveTimer); this._saveTimer = null }
     if (this._syncTimer) { clearTimeout(this._syncTimer); this._syncTimer = null }
     await this._saveToSupabase()
-    // Block further saves — the cleared state below must not overwrite Supabase.
-    this._dataLoaded = false
     if (supabase) await supabase.auth.signOut().catch(() => {})
     localStorage.removeItem('lf_state')
     this.setState({
