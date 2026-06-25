@@ -12,20 +12,64 @@ import sharp from 'sharp'
 const __dir = dirname(fileURLToPath(import.meta.url))
 const root = join(__dir, '..')
 
-const iconSvg   = readFileSync(join(root, 'resources/icon.svg'))
-const splashSvg = readFileSync(join(root, 'resources/splash.svg'))
+// Prefer user-provided PNG over SVG recreation for all sources
+const logoPngPath  = join(root, 'public/logo.png')
+const iconSvgPath  = join(root, 'resources/icon.svg')
+const splashSvgPath = join(root, 'resources/splash.svg')
+
+const iconSvg   = readFileSync(iconSvgPath)
+const splashSvg = readFileSync(splashSvgPath)
+
+// If the user dropped in public/logo.png, use it as the icon source:
+// center it on a white 1024×1024 square (with padding) so it looks great at all sizes.
+async function makeIconBuf() {
+  if (existsSync(logoPngPath)) {
+    console.log('  Using public/logo.png as app icon source')
+    const padding = 80
+    const inner   = 1024 - padding * 2
+    const resized = await sharp(logoPngPath)
+      .resize(inner, inner, { fit: 'inside', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .png().toBuffer()
+    const { width, height } = await sharp(resized).metadata()
+    const top  = Math.round((1024 - height) / 2)
+    const left = Math.round((1024 - width)  / 2)
+    return sharp({ create: { width: 1024, height: 1024, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } } })
+      .composite([{ input: resized, top, left }])
+      .png().toBuffer()
+  }
+  // Fallback: render the SVG
+  return sharp(iconSvg).resize(1024, 1024).png().toBuffer()
+}
+
+// Splash: logo.png centred on 2732×2732 white background
+async function makeSplashBuf(w, h) {
+  if (existsSync(logoPngPath)) {
+    const maxW = Math.round(w * 0.65)
+    const maxH = Math.round(h * 0.4)
+    const resized = await sharp(logoPngPath)
+      .resize(maxW, maxH, { fit: 'inside', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+      .png().toBuffer()
+    const { width: rw, height: rh } = await sharp(resized).metadata()
+    const top  = Math.round((h - rh) / 2)
+    const left = Math.round((w - rw) / 2)
+    return sharp({ create: { width: w, height: h, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } } })
+      .composite([{ input: resized, top, left }])
+      .png().toBuffer()
+  }
+  return sharp(splashSvg).resize(w, h).png().toBuffer()
+}
 
 function ensureDir(p) { if (!existsSync(p)) mkdirSync(p, { recursive: true }) }
 
-async function png(svgBuf, outPath, size) {
+async function png(buf, outPath, size) {
   ensureDir(dirname(outPath))
-  await sharp(svgBuf).resize(size, size).png().toFile(outPath)
+  await sharp(buf).resize(size, size).png().toFile(outPath)
   console.log(`  ✓ ${outPath} (${size}×${size})`)
 }
 
-async function splash(svgBuf, outPath, w, h) {
+async function splash(buf, outPath, w, h) {
   ensureDir(dirname(outPath))
-  await sharp(svgBuf).resize(w, h).png().toFile(outPath)
+  await sharp(buf).png().toFile(outPath)
   console.log(`  ✓ ${outPath} (${w}×${h})`)
 }
 
@@ -63,16 +107,26 @@ const androidSplash = [
 const resourcesOut = join(root, 'resources')
 
 async function main() {
-  console.log('\n🎨 Generating LearnFlow AI app icons & splash screens…\n')
+  console.log('\n🎨 Generating Wintrail app icons & splash screens…\n')
 
-  // Always generate the base resource PNGs (used by @capacitor/assets)
+  // Build buffers — prefers user-provided logo.png over SVG recreation
+  const iconBuf  = await makeIconBuf()
+  const splash2732 = await makeSplashBuf(2732, 2732)
+
+  // Always write base resource PNGs
   console.log('Base resource PNGs:')
-  await png(iconSvg,   join(resourcesOut, 'icon.png'),   1024)
-  await png(iconSvg,   join(resourcesOut, 'icon-foreground.png'), 432)
-  await png(splashSvg, join(resourcesOut, 'splash.png'), 2732)
-  await png(splashSvg, join(resourcesOut, 'splash-dark.png'), 2732)
+  const resourcesOut = join(root, 'resources')
+  ensureDir(resourcesOut)
+  await sharp(iconBuf).resize(1024, 1024).png().toFile(join(resourcesOut, 'icon.png'))
+  console.log(`  ✓ resources/icon.png (1024×1024)`)
+  await sharp(iconBuf).resize(432, 432).png().toFile(join(resourcesOut, 'icon-foreground.png'))
+  console.log(`  ✓ resources/icon-foreground.png (432×432)`)
+  await sharp(splash2732).png().toFile(join(resourcesOut, 'splash.png'))
+  console.log(`  ✓ resources/splash.png (2732×2732)`)
+  await sharp(splash2732).png().toFile(join(resourcesOut, 'splash-dark.png'))
+  console.log(`  ✓ resources/splash-dark.png (2732×2732)`)
 
-  const iosExists = existsSync(iosIconDir)
+  const iosExists     = existsSync(iosIconDir)
   const androidExists = existsSync(androidResDir)
 
   if (!iosExists && !androidExists) {
@@ -87,24 +141,27 @@ async function main() {
     for (const [base, scale] of iosIcons) {
       const size = Math.round(base * scale)
       const name = `icon-${base}@${scale}x.png`
-      await png(iconSvg, join(iosIconDir, name), size)
+      await png(iconBuf, join(iosIconDir, name), size)
     }
     console.log('\niOS splash:')
-    await splash(splashSvg, join(iosSplashDir, 'splash.png'), 2732, 2732)
-    await splash(splashSvg, join(iosSplashDir, 'splash@2x.png'), 2732, 2732)
-    await splash(splashSvg, join(iosSplashDir, 'splash@3x.png'), 2732, 2732)
+    const splashBuf = splash2732
+    await sharp(splashBuf).png().toFile(join(iosSplashDir, 'splash.png'))
+    await sharp(splashBuf).png().toFile(join(iosSplashDir, 'splash@2x.png'))
+    await sharp(splashBuf).png().toFile(join(iosSplashDir, 'splash@3x.png'))
+    console.log(`  ✓ iOS splash images (2732×2732)`)
   }
 
   if (androidExists) {
     console.log('\nAndroid icons:')
     for (const { dir, size } of androidDensities) {
-      await png(iconSvg, join(androidResDir, dir, 'ic_launcher.png'), size)
-      await png(iconSvg, join(androidResDir, dir, 'ic_launcher_round.png'), size)
-      await png(iconSvg, join(androidResDir, dir, 'ic_launcher_foreground.png'), size)
+      await png(iconBuf, join(androidResDir, dir, 'ic_launcher.png'), size)
+      await png(iconBuf, join(androidResDir, dir, 'ic_launcher_round.png'), size)
+      await png(iconBuf, join(androidResDir, dir, 'ic_launcher_foreground.png'), size)
     }
     console.log('\nAndroid splash:')
     for (const { dir, w, h } of androidSplash) {
-      await splash(splashSvg, join(androidResDir, dir, 'splash.png'), w, h)
+      const sb = await makeSplashBuf(w, h)
+      await splash(sb, join(androidResDir, dir, 'splash.png'), w, h)
     }
   }
 
