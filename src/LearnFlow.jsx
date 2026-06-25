@@ -70,6 +70,7 @@ export default class LearnFlow extends React.Component {
     addingGoal: false,
     addGoalText: '',
     mobileTab: 'home',   // active tab in native Capacitor app
+    pullRefreshing: false, // pull-to-refresh loading indicator
     progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [], phaseProgress: {} },
     userName: '',
     user: null,
@@ -2672,9 +2673,7 @@ export default class LearnFlow extends React.Component {
 
   buildNativeApp() {
     const s = this.state
-    // Not logged in → show native auth
     if (!s.user) return this.buildNativeAuth()
-    // Onboarding flow (new user or "Build roadmap" tap)
     if (s.screen === 'onboarding') {
       const v = this.renderVals()
       return e('div', { style: { height: '100dvh', overflowY: 'auto', WebkitOverflowScrolling: 'touch', background: 'var(--bg)' } },
@@ -2683,8 +2682,47 @@ export default class LearnFlow extends React.Component {
     }
     const tab = s.mobileTab || 'home'
     const isMentorTab = tab === 'mentor'
-    return e('div', { style: { height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' } },
-      e('div', { style: { flex: 1, overflowY: isMentorTab ? 'hidden' : 'auto', WebkitOverflowScrolling: 'touch', paddingTop: isMentorTab ? 0 : 'calc(env(safe-area-inset-top, 0px) + 16px)' } },
+
+    // Pull-to-refresh spinner shown at top while loading
+    const refreshBar = s.pullRefreshing
+      ? e('div', { style: { flexShrink: 0, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: 'var(--surface)', borderBottom: '1px solid var(--border)' } },
+          e('div', { style: { width: 20, height: 20, borderRadius: '50%', border: '2.5px solid var(--border-strong)', borderTopColor: 'var(--blue)', animation: 'lf-spin .7s linear infinite' } }),
+          e('span', { style: { fontSize: 13, color: 'var(--muted)', fontWeight: 500 } }, 'Refreshing…')
+        )
+      : null
+
+    return e('div', {
+      style: { height: '100dvh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+      // Pull-to-refresh: track touch start when scroll is at top
+      onTouchStart: isMentorTab ? undefined : (ev) => {
+        const el = ev.currentTarget.querySelector('.lf-native-scroll')
+        if (el && el.scrollTop <= 0) {
+          this._pullStartY = ev.touches[0].clientY
+          this._pullFired = false
+        } else {
+          this._pullStartY = null
+        }
+      },
+      onTouchMove: isMentorTab ? undefined : (ev) => {
+        if (this._pullStartY == null || this._pullFired || s.pullRefreshing) return
+        const dy = ev.touches[0].clientY - this._pullStartY
+        // Trigger when pulled down 80px+
+        if (dy > 80) {
+          this._pullFired = true
+          this._pullStartY = null
+          haptic()
+          this.setState({ pullRefreshing: true }, async () => {
+            if (this.state.user) await this.loadFromSupabase(this.state.user.id)
+            this.setState({ pullRefreshing: false })
+          })
+        }
+      },
+    },
+      refreshBar,
+      e('div', {
+        className: 'lf-native-scroll',
+        style: { flex: 1, overflowY: isMentorTab ? 'hidden' : 'auto', WebkitOverflowScrolling: 'touch', paddingTop: isMentorTab ? 0 : 'calc(env(safe-area-inset-top, 0px) + 16px)' },
+      },
         tab === 'home'      && this.buildNativeHome(),
         tab === 'roadmaps'  && this.buildNativeRoadmaps(),
         tab === 'planner'   && this.buildNativePlanner(),
