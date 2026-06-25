@@ -1095,17 +1095,49 @@ export default class LearnFlow extends React.Component {
               </div>
             )}
 
-            {v.obDone && (
-              <div className="lf-screen" style={S('text-align:center')}>
-                <div style={S('width:72px; height:72px; border-radius:99px; background:var(--emerald-soft); display:flex; align-items:center; justify-content:center; margin:0 auto 24px; animation:lf-pop .5s both')}><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg></div>
-                <h1 style={S('font-size:38px; font-weight:800; letter-spacing:-.03em; margin:0 0 12px')}>Your roadmap is ready</h1>
-                <p style={S('font-size:17px; color:var(--muted); margin:0 0 30px')}>{this.state.roadmap ? `A ${this.state.roadmap.totalWeeks}-week path` : 'A personalised path'} to <b style={S('color:var(--text)')}>{v.obData.topic}</b>, built around {v.obData.time}.</p>
-                <div style={S('display:flex; gap:12px; justify-content:center')}>
-                  <button className="lf-btn" onClick={v.goTo.roadmap} style={S('padding:15px 26px; border-radius:13px; border:none; background:linear-gradient(135deg,var(--blue),var(--blue-ink)); color:#fff; font-weight:600; font-size:16px; cursor:pointer; box-shadow:var(--shadow)')}>View my roadmap</button>
-                  <button className="lf-btn" onClick={v.goTo.dashboard} style={S('padding:15px 24px; border-radius:13px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); font-weight:600; font-size:16px; cursor:pointer')}>Go to dashboard</button>
+            {v.obDone && (() => {
+              const rm = this.state.roadmap || this.state.savedRoadmaps?.[0]
+              const topic = v.obData.topic || rm?.headline || 'your goal'
+              const timeRaw = v.obData.time || rm?.hoursPerDay || ''
+              const timeDisplay = timeRaw.toLowerCase().includes('custom') ? (rm?.hoursPerDay || 'your own schedule') : timeRaw
+              const failed = !rm  // generation failed silently
+
+              return (
+                <div className="lf-screen" style={S('text-align:center')}>
+                  {failed ? (
+                    <div style={S('width:72px; height:72px; border-radius:99px; background:var(--amber-soft); display:flex; align-items:center; justify-content:center; margin:0 auto 24px; animation:lf-pop .5s both')}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z" /></svg>
+                    </div>
+                  ) : (
+                    <div style={S('width:72px; height:72px; border-radius:99px; background:var(--emerald-soft); display:flex; align-items:center; justify-content:center; margin:0 auto 24px; animation:lf-pop .5s both')}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--emerald)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                    </div>
+                  )}
+                  <h1 style={S('font-size:38px; font-weight:800; letter-spacing:-.03em; margin:0 0 12px')}>
+                    {failed ? 'Generation took too long' : 'Your roadmap is ready'}
+                  </h1>
+                  <p style={S('font-size:17px; color:var(--muted); margin:0 0 30px; max-width:480px; margin-left:auto; margin-right:auto; text-wrap:pretty')}>
+                    {failed
+                      ? `We couldn't reach the AI right now. You can retry or continue to the dashboard and generate your roadmap from Settings.`
+                      : <>A <b style={S('color:var(--text)')}>{rm.totalWeeks}-week path</b> to <b style={S('color:var(--text)')}>{topic}</b>{timeDisplay ? <>, built around <b style={S('color:var(--text)')}>{timeDisplay}</b></> : ''}</>
+                    }
+                  </p>
+                  <div style={S('display:flex; gap:12px; justify-content:center; flex-wrap:wrap')}>
+                    {failed ? (
+                      <>
+                        <button className="lf-btn" onClick={() => this.setState({ obPhase: 'question', obStep: 4 })} style={S('padding:15px 26px; border-radius:13px; border:none; background:linear-gradient(135deg,var(--blue),var(--blue-ink)); color:#fff; font-weight:600; font-size:16px; cursor:pointer; box-shadow:var(--shadow)')}>Retry generation</button>
+                        <button className="lf-btn" onClick={v.goTo.dashboard} style={S('padding:15px 24px; border-radius:13px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); font-weight:600; font-size:16px; cursor:pointer')}>Go to dashboard</button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="lf-btn" onClick={v.goTo.roadmap} style={S('padding:15px 26px; border-radius:13px; border:none; background:linear-gradient(135deg,var(--blue),var(--blue-ink)); color:#fff; font-weight:600; font-size:16px; cursor:pointer; box-shadow:var(--shadow)')}>View my roadmap</button>
+                        <button className="lf-btn" onClick={v.goTo.dashboard} style={S('padding:15px 24px; border-radius:13px; border:1px solid var(--border-strong); background:var(--surface); color:var(--text); font-weight:600; font-size:16px; cursor:pointer')}>Go to dashboard</button>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )
+            })()}
           </div>
         </div>
       </div>
