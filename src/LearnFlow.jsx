@@ -30,12 +30,20 @@ export default class LearnFlow extends React.Component {
     chatInput: '',
     chatMsgs: [],
     chatTyping: false,
-    roadmapPhase: 1,
+    roadmapPhase: 0,
     plannerView: 'week',
     libraryFilter: 'All',
     roadmap: null,
-    savedRoadmaps: [],  // [{id, createdAt, headline, ...full roadmap data}]
+    savedRoadmaps: [],
     tasks: null,
+    librarySelected: null,       // item shown in library popup
+    plannerItems: {},            // { 'YYYY-MM-DD': [{id,t,time,c,soft}] }
+    kanbanCards: null,           // null=auto-gen; {todo:[],inprogress:[],done:[]}
+    expandedSkillPhases: { 0: true },  // phase idx → expanded bool
+    plannerAddDay: null,         // date string for inline week add form
+    plannerAddCol: null,         // kanban col for inline add form
+    plannerAddText: '',
+    plannerAddTime: '09:00',
     progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [] },
     userName: '',
     user: null,
@@ -310,6 +318,72 @@ export default class LearnFlow extends React.Component {
       const roadmap = s.roadmap?.id === id ? (saved[0] || null) : s.roadmap
       return { savedRoadmaps: saved, roadmap }
     })
+  }
+
+  // ---------- PLANNER ----------
+  _plannerKey(dateStr) { return dateStr }
+
+  addPlannerItem(dateStr) {
+    const text = this.state.plannerAddText.trim()
+    if (!text) { this.setState({ plannerAddDay: null, plannerAddText: '' }); return }
+    const item = { id: Date.now().toString(), t: text, time: this.state.plannerAddTime, c: 'var(--blue)', soft: 'var(--blue-soft)' }
+    this.setState((s) => ({
+      plannerItems: { ...s.plannerItems, [dateStr]: [...(s.plannerItems[dateStr] || []), item] },
+      plannerAddDay: null, plannerAddText: '', plannerAddTime: '09:00',
+    }))
+  }
+
+  removePlannerItem(dateStr, id) {
+    this.setState((s) => ({
+      plannerItems: { ...s.plannerItems, [dateStr]: (s.plannerItems[dateStr] || []).filter((x) => x.id !== id) },
+    }))
+  }
+
+  _ensureKanban() {
+    if (this.state.kanbanCards) return this.state.kanbanCards
+    const rm = this.state.roadmap
+    const phase = rm?.phases?.[0]
+    const phaseLabel = phase?.title || 'Phase 1'
+    const tasks = this.state.tasks || rm?.todaysTasks || []
+    return {
+      todo: tasks.filter((t) => !t.done).map((t) => ({ id: 't' + t.t.slice(0, 8), t: t.t, m: phaseLabel + ' · ' + t.d, c: 'var(--blue)' }))
+        .concat((phase?.courses || []).slice(2, 4).map((c, i) => ({ id: 'c' + i, t: c.split(' — ')[0], m: phaseLabel + ' · Course', c: 'var(--violet)' }))),
+      inprogress: (phase?.courses || []).slice(0, 2).map((c, i) => ({ id: 'ip' + i, t: c.split(' — ')[0], m: phaseLabel, c: 'var(--blue)' }))
+        .concat((phase?.projects || []).slice(0, 1).map((p, i) => ({ id: 'pr' + i, t: p, m: phaseLabel + ' · Project', c: 'var(--amber)' }))),
+      done: tasks.filter((t) => t.done).map((t) => ({ id: 'd' + t.t.slice(0, 8), t: t.t, m: 'Completed today', c: 'var(--emerald)' })),
+    }
+  }
+
+  addKanbanCard(col) {
+    const text = this.state.plannerAddText.trim()
+    if (!text) { this.setState({ plannerAddCol: null, plannerAddText: '' }); return }
+    const kb = this._ensureKanban()
+    const newCard = { id: Date.now().toString(), t: text, m: 'Added manually', c: col === 'done' ? 'var(--emerald)' : col === 'inprogress' ? 'var(--blue)' : 'var(--subtle)' }
+    this.setState({ kanbanCards: { ...kb, [col]: [...(kb[col] || []), newCard] }, plannerAddCol: null, plannerAddText: '' })
+  }
+
+  moveKanbanCard(id, fromCol, toCol) {
+    if (fromCol === toCol) return
+    const kb = { ...this._ensureKanban() }
+    const card = (kb[fromCol] || []).find((c) => c.id === id)
+    if (!card) return
+    const updated = { ...card, c: toCol === 'done' ? 'var(--emerald)' : toCol === 'inprogress' ? 'var(--blue)' : 'var(--subtle)' }
+    this.setState({
+      kanbanCards: {
+        ...kb,
+        [fromCol]: (kb[fromCol] || []).filter((c) => c.id !== id),
+        [toCol]: [...(kb[toCol] || []), updated],
+      },
+    })
+  }
+
+  removeKanbanCard(id, col) {
+    const kb = this._ensureKanban()
+    this.setState({ kanbanCards: { ...kb, [col]: (kb[col] || []).filter((c) => c.id !== id) } })
+  }
+
+  toggleSkillPhase(idx) {
+    this.setState((s) => ({ expandedSkillPhases: { ...s.expandedSkillPhases, [idx]: !s.expandedSkillPhases[idx] } }))
   }
 
   freshOnboarding() {
@@ -1408,12 +1482,10 @@ export default class LearnFlow extends React.Component {
     const view = this.state.plannerView
     const rm = this.state.roadmap
     const tabs = [['week', 'Week'], ['kanban', 'Board'], ['calendar', 'Month']]
-
-    // Build week from roadmap when available, otherwise show mock
     const now = new Date()
-    const dow = now.getDay() // 0=Sun...6=Sat
+    const dow = now.getDay()
     const monday = new Date(now); monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1))
-    const todayIdx = dow === 0 ? 6 : dow - 1 // 0=Mon...6=Sun
+    const todayIdx = dow === 0 ? 6 : dow - 1
     const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
     const monthStr = now.toLocaleString('default', { month: 'long' }) + ' ' + now.getFullYear()
 
@@ -1423,72 +1495,151 @@ export default class LearnFlow extends React.Component {
       e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginBottom: 24 } }, 'Your weekly planner is generated from your roadmap tasks and phases.'),
       e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '12px 22px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 14.5, cursor: 'pointer' } }, 'Build my roadmap'))
 
-    const week = (() => {
-      const phase = rm.phases && rm.phases[0]
-      const courses = (phase?.courses || []).map((c, i) => ({ t: c.split(' — ')[0], time: i % 2 === 0 ? '7:00' : '19:30', c: 'var(--blue)', soft: 'var(--blue-soft)' }))
-      const projects = (phase?.projects || []).map((p) => ({ t: p, time: '10:00', c: 'var(--emerald)', soft: 'var(--emerald-soft)' }))
-      const daytasks = (rm.todaysTasks || []).map((t) => ({ t: t.t, time: '9:00', c: 'var(--violet)', soft: 'var(--violet-soft)' }))
-      const pool = [...daytasks, ...courses, ...projects]
-      return dayNames.map((d, i) => {
-        const date = new Date(monday); date.setDate(monday.getDate() + i)
-        const items = i < 5 ? pool.slice(i, i + 1) : i === 5 ? projects.slice(0, 2) : [{ t: 'Weekly review with Mentor AI', time: '18:00', c: 'var(--violet)', soft: 'var(--violet-soft)' }]
-        return { d, n: String(date.getDate()), today: i === todayIdx, items }
-      })
-    })()
+    // --- WEEK VIEW data ---
+    const phase = rm.phases?.[0]
+    const courses = (phase?.courses || []).map((c, i) => ({ id: 'rc' + i, t: c.split(' — ')[0].split(' | ')[0], time: i % 2 === 0 ? '09:00' : '19:00', c: 'var(--blue)', soft: 'var(--blue-soft)' }))
+    const projects = (phase?.projects || []).map((p, i) => ({ id: 'rp' + i, t: p, time: '10:00', c: 'var(--emerald)', soft: 'var(--emerald-soft)' }))
+    const daytasks = (rm.todaysTasks || []).map((t, i) => ({ id: 'rt' + i, t: t.t, time: '09:00', c: 'var(--violet)', soft: 'var(--violet-soft)' }))
+    const pool = [...daytasks, ...courses, ...projects]
 
-    const currentTasks = this.state.tasks || (rm.todaysTasks || [])
-    const phase = rm.phases && rm.phases[0]
-    const phaseLabel = phase ? phase.title : 'Phase 1'
-    const kb = [
-      { col: 'To do', c: 'var(--subtle)', cards: currentTasks.filter((t) => !t.done).map((t) => ({ t: t.t, m: phaseLabel + ' · ' + t.d, c: 'var(--blue)' })).concat((phase?.courses || []).slice(2, 4).map((c) => ({ t: c.split(' — ')[0], m: phaseLabel + ' · Course', c: 'var(--violet)' }))).slice(0, 4) },
-      { col: 'In progress', c: 'var(--blue)', cards: (phase?.courses || []).slice(0, 2).map((c) => ({ t: c.split(' — ')[0], m: phaseLabel, c: 'var(--blue)' })).concat((phase?.projects || []).slice(0, 1).map((p) => ({ t: p, m: phaseLabel + ' · Project', c: 'var(--amber)' }))) },
-      { col: 'Done', c: 'var(--emerald)', cards: currentTasks.filter((t) => t.done).map((t) => ({ t: t.t, m: 'Completed today', c: 'var(--emerald)' })) },
+    const week = dayNames.map((d, i) => {
+      const date = new Date(monday); date.setDate(monday.getDate() + i)
+      const iso = date.toISOString().slice(0, 10)
+      const isPast = i < todayIdx
+      const roadmapItems = isPast ? [] : (i < 5 ? pool.slice(i - todayIdx >= 0 ? i - todayIdx : 0, (i - todayIdx >= 0 ? i - todayIdx : 0) + 1) : i === 5 ? projects.slice(0, 2) : [{ id: 'rev', t: 'Weekly review with Mentor AI', time: '18:00', c: 'var(--violet)', soft: 'var(--violet-soft)' }])
+      const userItems = (this.state.plannerItems[iso] || [])
+      return { d, n: String(date.getDate()), today: i === todayIdx, isPast, iso, items: [...roadmapItems, ...userItems] }
+    })
+
+    // --- KANBAN data ---
+    const kb = this._ensureKanban()
+    const colDefs = [
+      { key: 'todo', label: 'To do', c: 'var(--subtle)' },
+      { key: 'inprogress', label: 'In progress', c: 'var(--blue)' },
+      { key: 'done', label: 'Done', c: 'var(--emerald)' },
     ]
 
-    const scheduledMins = week.reduce((a, d) => a + d.items.length * 45, 0)
-    const scheduledHrs = (scheduledMins / 60).toFixed(1)
+    const header = e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 } },
+      e('div', {}, e('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-.03em' } }, 'Planner'),
+        e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 3 } }, monthStr + (view === 'week' ? ' · ' + week.reduce((a, d) => a + d.items.length, 0) + ' items this week' : ''))),
+      e('div', { style: { display: 'flex', gap: 10, alignItems: 'center' } },
+        e('div', { style: { display: 'flex', gap: 3, padding: 4, borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)' } },
+          tabs.map((t, i) => e('button', { key: i, onClick: this.setPlannerView(t[0]), className: 'lf-btn', style: { padding: '7px 16px', borderRadius: 9, border: 'none', background: view === t[0] ? 'var(--surface)' : 'transparent', color: view === t[0] ? 'var(--text)' : 'var(--muted)', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', boxShadow: view === t[0] ? 'var(--shadow-sm)' : 'none' } }, t[1]))),
+        e('button', { className: 'lf-btn', onClick: this.go('mentor'), style: { padding: '9px 15px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 } },
+          e('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3' })), 'AI schedule')))
 
-    return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-      e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 } },
-        e('div', {}, e('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-.03em' } }, 'Planner'),
-          e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 3 } }, monthStr + ' · ' + scheduledHrs + ' hrs scheduled this week')),
-        e('div', { style: { display: 'flex', gap: 10, alignItems: 'center' } },
-          e('div', { style: { display: 'flex', gap: 3, padding: 4, borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--border)' } },
-            tabs.map((t, i) => e('button', { key: i, onClick: this.setPlannerView(t[0]), className: 'lf-btn', style: { padding: '7px 16px', borderRadius: 9, border: 'none', background: view === t[0] ? 'var(--surface)' : 'transparent', color: view === t[0] ? 'var(--text)' : 'var(--muted)', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', boxShadow: view === t[0] ? 'var(--shadow-sm)' : 'none' } }, t[1]))),
-          e('button', { className: 'lf-btn', onClick: this.go('mentor'), style: { padding: '9px 15px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 13.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7 } },
-            e('svg', { width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3' })), 'AI schedule'))),
-      view === 'week' ? e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 12 } },
-        week.map((d, i) => e('div', { key: i, style: { borderRadius: 18, background: 'var(--surface)', border: '1px solid ' + (d.today ? 'var(--blue)' : 'var(--border)'), padding: 14, minHeight: 280, boxShadow: d.today ? 'var(--shadow)' : 'var(--shadow-sm)' } },
-          e('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 14 } },
-            e('span', { style: { fontSize: 12, fontWeight: 600, color: d.today ? 'var(--blue)' : 'var(--subtle)', textTransform: 'uppercase', letterSpacing: '.05em' } }, d.d),
-            e('span', { style: { fontSize: 20, fontWeight: 800, color: d.today ? 'var(--blue)' : 'var(--text)', marginTop: 2 } }, d.n)),
-          e('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-            d.items.length ? d.items.map((it, j) => e('div', { key: j, className: 'lf-btn', style: { padding: '9px 10px', borderRadius: 11, background: it.soft, borderLeft: '3px solid ' + it.c, cursor: 'grab' } },
-              e('div', { style: { fontSize: 11, fontWeight: 700, color: it.c } }, it.time),
-              e('div', { style: { fontSize: 12.5, fontWeight: 600, color: 'var(--text)', marginTop: 2, lineHeight: 1.3 } }, it.t)))
-            : e('div', { style: { textAlign: 'center', padding: '20px 0', fontSize: 12, color: 'var(--subtle)', border: '1.5px dashed var(--border)', borderRadius: 11 } }, 'Rest day')))))
-      : view === 'kanban' ? e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 } },
-        kb.map((k, i) => e('div', { key: i, style: { borderRadius: 18, background: 'var(--surface-2)', border: '1px solid var(--border)', padding: 16 } },
-          e('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 } },
-            e('span', { style: { width: 9, height: 9, borderRadius: 99, background: k.c } }),
-            e('span', { style: { fontSize: 14, fontWeight: 700 } }, k.col),
-            e('span', { style: { marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--subtle)', background: 'var(--surface)', borderRadius: 99, padding: '2px 9px' } }, k.cards.length)),
-          e('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } },
-            k.cards.map((c, j) => e('div', { key: j, className: 'lf-card-h', style: { padding: 14, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', cursor: 'grab', borderLeft: '3px solid ' + c.c } },
-              e('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 5 } }, c.t),
-              e('div', { style: { fontSize: 12.5, color: 'var(--muted)' } }, c.m)))))))
-      : this.monthView()
-    )
+    // --- WEEK VIEW ---
+    if (view === 'week') return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } }, header,
+      e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 10 } },
+        week.map((d, i) => {
+          const isAdding = this.state.plannerAddDay === d.iso
+          return e('div', { key: i, style: { borderRadius: 18, background: 'var(--surface)', border: '1px solid ' + (d.today ? 'var(--blue)' : 'var(--border)'), padding: 12, minHeight: 300, boxShadow: d.today ? 'var(--shadow)' : 'var(--shadow-sm)', opacity: d.isPast ? .6 : 1 } },
+            e('div', { style: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 12 } },
+              e('span', { style: { fontSize: 11, fontWeight: 700, color: d.today ? 'var(--blue)' : 'var(--subtle)', textTransform: 'uppercase', letterSpacing: '.05em' } }, d.d),
+              e('span', { style: { fontSize: 19, fontWeight: 800, color: d.today ? 'var(--blue)' : 'var(--text)', marginTop: 2 } }, d.n)),
+            e('div', { style: { display: 'flex', flexDirection: 'column', gap: 7 } },
+              d.items.map((it, j) => e('div', { key: j, className: 'lf-btn', style: { padding: '8px 9px', borderRadius: 10, background: it.soft || 'var(--blue-soft)', borderLeft: '3px solid ' + it.c, position: 'relative', cursor: 'default' } },
+                e('div', { style: { fontSize: 10, fontWeight: 700, color: it.c } }, it.time),
+                e('div', { style: { fontSize: 12, fontWeight: 600, color: 'var(--text)', marginTop: 2, lineHeight: 1.3, paddingRight: it.id && !it.id.startsWith('r') ? 16 : 0 } }, it.t),
+                it.id && !it.id.startsWith('r') && e('span', { onClick: () => this.removePlannerItem(d.iso, it.id), style: { position: 'absolute', top: 4, right: 6, fontSize: 14, color: 'var(--subtle)', cursor: 'pointer', lineHeight: 1 } }, '×'))),
+              isAdding
+                ? e('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, padding: '8px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' } },
+                    e('input', { value: this.state.plannerAddText, onChange: (ev) => this.setState({ plannerAddText: ev.target.value }), onKeyDown: (ev) => { if (ev.key === 'Enter') this.addPlannerItem(d.iso); if (ev.key === 'Escape') this.setState({ plannerAddDay: null, plannerAddText: '' }) }, placeholder: 'Task name…', autoFocus: true, style: { border: 'none', background: 'transparent', color: 'var(--text)', fontSize: 12.5, outline: 'none', fontFamily: 'inherit', width: '100%' } }),
+                    e('div', { style: { display: 'flex', gap: 5 } },
+                      e('input', { type: 'time', value: this.state.plannerAddTime, onChange: (ev) => this.setState({ plannerAddTime: ev.target.value }), style: { border: 'none', background: 'transparent', color: 'var(--muted)', fontSize: 11, fontFamily: 'inherit', outline: 'none', flex: 1 } }),
+                      e('button', { onClick: () => this.addPlannerItem(d.iso), style: { fontSize: 11, fontWeight: 700, color: 'var(--blue)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' } }, 'Add'),
+                      e('button', { onClick: () => this.setState({ plannerAddDay: null, plannerAddText: '' }), style: { fontSize: 11, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px' } }, 'Cancel')))
+                : !d.isPast && e('button', { onClick: () => this.setState({ plannerAddDay: d.iso, plannerAddText: '', plannerAddTime: '09:00' }), className: 'lf-btn', style: { marginTop: 4, width: '100%', padding: '7px', borderRadius: 9, border: '1.5px dashed var(--border)', background: 'transparent', color: 'var(--subtle)', fontSize: 12, cursor: 'pointer', fontWeight: 600 } }, '+ Add')))
+        })))
+
+    // --- KANBAN (BOARD) VIEW ---
+    if (view === 'kanban') return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } }, header,
+      e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 16 } },
+        colDefs.map((col) => {
+          const cards = kb[col.key] || []
+          const isAdding = this.state.plannerAddCol === col.key
+          return e('div', { key: col.key,
+            onDragOver: (ev) => ev.preventDefault(),
+            onDrop: (ev) => { ev.preventDefault(); try { const d = JSON.parse(ev.dataTransfer.getData('text/plain')); if (d.fromCol !== col.key) this.moveKanbanCard(d.id, d.fromCol, col.key) } catch {} },
+            style: { borderRadius: 18, background: 'var(--surface-2)', border: '1px solid var(--border)', padding: 16, minHeight: 300 } },
+            e('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 } },
+              e('span', { style: { width: 9, height: 9, borderRadius: 99, background: col.c } }),
+              e('span', { style: { fontSize: 14, fontWeight: 700 } }, col.label),
+              e('span', { style: { marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--subtle)', background: 'var(--surface)', borderRadius: 99, padding: '2px 9px' } }, cards.length)),
+            e('div', { style: { display: 'flex', flexDirection: 'column', gap: 9 } },
+              cards.map((card) => e('div', { key: card.id,
+                draggable: true,
+                onDragStart: (ev) => ev.dataTransfer.setData('text/plain', JSON.stringify({ id: card.id, fromCol: col.key })),
+                className: 'lf-card-h',
+                style: { padding: 14, borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', cursor: 'grab', borderLeft: '3px solid ' + card.c, position: 'relative' } },
+                e('div', { style: { fontSize: 14, fontWeight: 600, marginBottom: 4, paddingRight: 18 } }, card.t),
+                e('div', { style: { fontSize: 12.5, color: 'var(--muted)' } }, card.m),
+                e('span', { onClick: () => this.removeKanbanCard(card.id, col.key), style: { position: 'absolute', top: 8, right: 10, fontSize: 15, color: 'var(--subtle)', cursor: 'pointer', lineHeight: 1 } }, '×'))),
+              isAdding
+                ? e('div', { style: { padding: '10px', borderRadius: 12, background: 'var(--surface)', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 8 } },
+                    e('input', { value: this.state.plannerAddText, onChange: (ev) => this.setState({ plannerAddText: ev.target.value }), onKeyDown: (ev) => { if (ev.key === 'Enter') this.addKanbanCard(col.key); if (ev.key === 'Escape') this.setState({ plannerAddCol: null, plannerAddText: '' }) }, placeholder: 'Card title…', autoFocus: true, style: { border: 'none', background: 'transparent', color: 'var(--text)', fontSize: 13.5, outline: 'none', fontFamily: 'inherit', width: '100%' } }),
+                    e('div', { style: { display: 'flex', gap: 6 } },
+                      e('button', { onClick: () => this.addKanbanCard(col.key), style: { padding: '5px 12px', borderRadius: 8, border: 'none', background: 'var(--blue)', color: '#fff', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' } }, 'Add card'),
+                      e('button', { onClick: () => this.setState({ plannerAddCol: null, plannerAddText: '' }), style: { padding: '5px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'none', color: 'var(--muted)', fontSize: 12.5, cursor: 'pointer' } }, 'Cancel')))
+                : e('button', { onClick: () => this.setState({ plannerAddCol: col.key, plannerAddText: '' }), className: 'lf-btn', style: { marginTop: 4, width: '100%', padding: '9px', borderRadius: 10, border: '1.5px dashed var(--border)', background: 'transparent', color: 'var(--subtle)', fontSize: 13, cursor: 'pointer', fontWeight: 600 } }, '+ Add card'))
+          )
+        })))
+
+    // --- MONTH VIEW ---
+    return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } }, header, this.monthView())
   }
+
   monthView() {
+    const now = new Date()
+    const year = now.getFullYear(); const month = now.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const startOffset = (firstDay.getDay() + 6) % 7   // 0 = Mon
     const dows = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    const cells = []; for (let i = 0; i < 35; i++) { const day = i - 2; cells.push(day >= 1 && day <= 28 ? day : null) }
-    const events = { 5: 2, 6: 1, 12: 2, 13: 1, 14: 3, 16: 1, 17: 2, 18: 1, 20: 1, 21: 2, 24: 1, 25: 1, 27: 2, 28: 1 }
-    return e('div', { style: { borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', padding: 22, boxShadow: 'var(--shadow-sm)' } },
-      e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8, marginBottom: 10 } }, dows.map((d, i) => e('div', { key: i, style: { fontSize: 12, fontWeight: 700, color: 'var(--subtle)', textAlign: 'center' } }, d))),
-      e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8 } }, cells.map((d, i) => e('div', { key: i, style: { minHeight: 84, borderRadius: 12, background: d === 14 ? 'var(--blue-soft)' : 'var(--surface-2)', border: '1px solid ' + (d === 14 ? 'var(--blue)' : 'var(--border)'), padding: 8, opacity: d ? 1 : .4 } },
-        d ? e('div', {}, e('div', { style: { fontSize: 13, fontWeight: 700, color: d === 14 ? 'var(--blue)' : 'var(--text)' } }, d),
-          e('div', { style: { display: 'flex', flexDirection: 'column', gap: 3, marginTop: 5 } }, Array.from({ length: events[d] || 0 }).map((_, j) => e('div', { key: j, style: { height: 4, borderRadius: 99, background: ['var(--blue)', 'var(--violet)', 'var(--amber)'][j % 3] } })))) : null))))
+    const rm = this.state.roadmap
+
+    // Gather events per day
+    const eventsByDay = {}
+    Object.entries(this.state.plannerItems).forEach(([iso, items]) => {
+      const d = parseInt(iso.slice(8, 10)); const m = parseInt(iso.slice(5, 7)) - 1; const y = parseInt(iso.slice(0, 4))
+      if (y === year && m === month) { eventsByDay[d] = (eventsByDay[d] || []).concat(items) }
+    })
+    // Add today's roadmap tasks on today's date
+    const today = now.getDate()
+    if (rm && rm.todaysTasks) {
+      eventsByDay[today] = [...(eventsByDay[today] || []), ...rm.todaysTasks.slice(0, 3).map((t) => ({ id: 'rt' + t.t.slice(0, 6), t: t.t, c: 'var(--violet)' }))]
+    }
+    // Add milestones that match this month
+    if (rm && rm.milestones) {
+      rm.milestones.forEach((m, i) => {
+        // Look for day number in the date string e.g. "Week 6" skip, "Nov 15" parse
+        const match = m.d && m.d.match(/\b(\d{1,2})\b/)
+        if (match) {
+          const day = parseInt(match[1]); if (day >= 1 && day <= daysInMonth)
+            eventsByDay[day] = [...(eventsByDay[day] || []), { id: 'ms' + i, t: m.t, c: 'var(--amber)' }]
+        }
+      })
+    }
+
+    const palette = ['var(--blue)', 'var(--violet)', 'var(--emerald)', 'var(--amber)']
+
+    const cells = []
+    for (let p = 0; p < startOffset; p++) cells.push(null)
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+    while (cells.length % 7 !== 0) cells.push(null)
+
+    return e('div', { style: { borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', padding: 20, boxShadow: 'var(--shadow-sm)' } },
+      e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4, marginBottom: 6 } },
+        dows.map((d, i) => e('div', { key: i, style: { fontSize: 12, fontWeight: 700, color: 'var(--subtle)', textAlign: 'center', padding: '4px 0' } }, d))),
+      e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 } },
+        cells.map((d, i) => {
+          if (!d) return e('div', { key: i, style: { minHeight: 90, borderRadius: 10, background: 'var(--surface-2)', opacity: .25 } })
+          const isToday = d === today; const evts = eventsByDay[d] || []
+          return e('div', { key: i, style: { minHeight: 90, borderRadius: 10, background: isToday ? 'var(--blue-soft)' : 'var(--surface-2)', border: '1px solid ' + (isToday ? 'var(--blue)' : 'var(--border)'), padding: '6px 7px', overflow: 'hidden', verticalAlign: 'top' } },
+            e('div', { style: { fontSize: 13, fontWeight: isToday ? 800 : 600, color: isToday ? 'var(--blue)' : 'var(--text)', marginBottom: 5 } }, d),
+            evts.slice(0, 3).map((ev, j) => e('div', { key: j, style: { fontSize: 11, fontWeight: 600, padding: '2px 6px', marginBottom: 2, borderRadius: 5, background: ev.c || palette[j % palette.length], color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, ev.t)),
+            evts.length > 3 && e('div', { style: { fontSize: 10.5, color: 'var(--muted)', paddingLeft: 2 } }, '+' + (evts.length - 3) + ' more'))
+        })))
   }
 
   buildAnalytics() {
@@ -1593,129 +1744,178 @@ export default class LearnFlow extends React.Component {
 
   buildSkillTree() {
     const rm = this.state.roadmap
-    const emptyState = () => e('div', { style: { textAlign: 'center', padding: '80px 24px' } },
+    if (!rm) return e('div', { style: { textAlign: 'center', padding: '80px 24px' } },
       e('div', { style: { fontSize: 48, marginBottom: 16 } }, '🌳'),
       e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 8 } }, 'No skill tree yet'),
       e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginBottom: 24 } }, 'Your skill tree is generated from your learning roadmap.'),
       e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '12px 22px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 14.5, cursor: 'pointer' } }, 'Build my roadmap'))
-    if (!rm) return emptyState()
 
     const phases = rm.phases || []
-    const W = Math.max(900, phases.length * 220)
-    const H = 500
-    const sty = { learned: { bg: 'var(--emerald)', ring: 'var(--emerald)', fg: '#fff' }, inprogress: { bg: 'var(--surface)', ring: 'var(--blue)', fg: 'var(--blue-ink)' }, locked: { bg: 'var(--surface-2)', ring: 'var(--border-strong)', fg: 'var(--subtle)' } }
+    const expanded = this.state.expandedSkillPhases
+    const statusIcon = (status) => status === 'learned'
+      ? e('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 3, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M20 6 9 17l-5-5' }))
+      : status === 'inprogress'
+      ? e('span', { style: { fontSize: 13, fontWeight: 800, color: 'var(--blue-ink)' } }, '⋯')
+      : e('svg', { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--subtle)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M6 11V8a6 6 0 0 1 12 0v3' }), e('rect', { x: 5, y: 11, width: 14, height: 9, rx: 2 }))
 
-    // Phase nodes evenly spaced at the top
-    const padding = 100
-    const phaseNodes = phases.map((p, i) => {
-      const status = p.pct === 100 ? 'learned' : p.status === 'In progress' ? 'inprogress' : 'locked'
-      const c = LearnFlow.PHASE_COLORS[i % LearnFlow.PHASE_COLORS.length]
-      return { id: 'p' + i, x: Math.round(padding + (i * (W - 2 * padding)) / Math.max(phases.length - 1, 1)), y: 90, label: p.title, sub: p.cert, status, color: c.color, soft: c.soft, pct: p.pct }
-    })
-
-    // Skill nodes below each phase
-    const skillNodes = []; const edges = []
-    phases.forEach((p, pi) => {
-      const px = phaseNodes[pi].x
-      const skills = (p.skills || []).slice(0, 4)
-      skills.forEach((skill, si) => {
-        const col = si % 2; const row = Math.floor(si / 2)
-        const x = px + (col === 0 ? -55 : 55)
-        const y = 220 + row * 100
-        const status = p.pct === 100 ? 'learned' : (p.status === 'In progress' && si < 2) ? 'inprogress' : p.status === 'In progress' ? 'locked' : 'locked'
-        const id = 'p' + pi + 's' + si
-        skillNodes.push({ id, x, y, label: skill, status })
-        edges.push([phaseNodes[pi], { x, y, status }])
-      })
-      if (pi > 0) edges.push([phaseNodes[pi - 1], phaseNodes[pi]])
-    })
-
-    const learned = [...phaseNodes, ...skillNodes].filter((n) => n.status === 'learned').length
-    const inprog = [...phaseNodes, ...skillNodes].filter((n) => n.status === 'inprogress').length
-    const locked = [...phaseNodes, ...skillNodes].filter((n) => n.status === 'locked').length
-    const nextPhase = phases.find((p) => p.status !== 'Completed' && p.pct < 100)
-
-    const renderNode = (n, big) => {
-      const st = sty[n.status]
-      return e('div', { key: n.id, style: { position: 'absolute', left: n.x, top: n.y, transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: n.status !== 'locked' ? 'pointer' : 'default', zIndex: 2 } },
-        e('div', { className: n.status !== 'locked' ? 'lf-btn' : '', style: { width: big ? 64 : 48, height: big ? 64 : 48, borderRadius: big ? 18 : 13, background: st.bg, border: '2.5px solid ' + st.ring, boxShadow: n.status === 'inprogress' ? '0 0 0 6px ' + (n.soft || 'var(--blue-soft)') : n.status === 'learned' ? 'var(--shadow-sm)' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
-          n.status === 'learned' ? e('svg', { width: big ? 26 : 20, height: big ? 26 : 20, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.8, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M20 6 9 17l-5-5' }))
-          : n.status === 'inprogress' ? e('div', { style: { fontSize: big ? 18 : 14, fontWeight: 800, color: st.fg } }, '⋯')
-          : e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--subtle)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M6 11V8a6 6 0 0 1 12 0v3' }), e('rect', { x: 5, y: 11, width: 14, height: 9, rx: 2 }))),
-        e('div', { style: { textAlign: 'center', maxWidth: big ? 110 : 84 } },
-          e('div', { style: { fontSize: big ? 13 : 11.5, fontWeight: 600, color: n.status === 'locked' ? 'var(--subtle)' : 'var(--text)', lineHeight: 1.25 } }, n.label),
-          n.sub ? e('div', { style: { fontSize: 10.5, fontWeight: 700, color: n.status === 'learned' ? 'var(--emerald)' : n.status === 'inprogress' ? 'var(--blue)' : 'var(--subtle)', marginTop: 2 } }, n.sub) : null))
-    }
+    const totalSkills = phases.reduce((a, p) => a + (p.skills || []).length, 0)
+    const masteredSkills = phases.filter((p) => p.pct === 100).reduce((a, p) => a + (p.skills || []).length, 0)
+    const inProgSkills = phases.filter((p) => p.status === 'In progress').reduce((a, p) => a + (p.skills || []).length, 0)
 
     return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
       e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 } },
         e('div', {}, e('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-.03em' } }, 'Skill Tree'),
-          e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 3 } }, rm.headline + ' · unlock skills as you progress')),
+          e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 3 } }, rm.headline + ' · click a phase to expand its skills')),
         e('div', { style: { display: 'flex', gap: 18 } },
-          [['var(--emerald)', 'Mastered · ' + learned], ['var(--blue)', 'In progress · ' + inprog], ['var(--subtle)', 'Locked · ' + locked]].map((l, i) =>
-            e('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--muted)', fontWeight: 500 } }, e('span', { style: { width: 10, height: 10, borderRadius: 99, background: l[0] } }), l[1])))),
-      e('div', { className: 'lf-scroll', style: { borderRadius: 22, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', padding: 20, overflowX: 'auto' } },
-        e('div', { style: { position: 'relative', width: W, height: H, margin: '0 auto' } },
-          e('svg', { width: W, height: H, style: { position: 'absolute', inset: 0 } },
-            edges.map((ed, i) => {
-              const [a, b] = ed; const dim = b.status === 'locked'
-              return e('path', { key: i, d: 'M' + a.x + ' ' + a.y + ' C' + ((a.x + b.x) / 2) + ' ' + a.y + ',' + ((a.x + b.x) / 2) + ' ' + b.y + ',' + b.x + ' ' + b.y, fill: 'none', stroke: dim ? 'var(--border)' : 'var(--blue)', strokeWidth: 2, strokeDasharray: dim ? '5 6' : 'none', opacity: dim ? .5 : .4 })
-            })),
-          phaseNodes.map((n) => renderNode(n, true)),
-          skillNodes.map((n) => renderNode(n, false)))),
-      nextPhase && e('div', { style: { display: 'flex', gap: 14, padding: '16px 20px', borderRadius: 16, background: 'var(--blue-soft)', border: '1px solid var(--border)', alignItems: 'center' } },
-        e('div', { style: { width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,var(--blue),var(--violet))', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' } },
-          e('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M12 3v3M12 18v3M3 12h3M18 12h3' }))),
-        e('div', { style: { flex: 1, fontSize: 14, color: 'var(--text)' } },
-          e('b', {}, 'Next up: ' + nextPhase.title + ' · ' + nextPhase.cert + '.'), ' ' + nextPhase.sub),
-        e('button', { className: 'lf-btn', onClick: this.go('mentor'), style: { padding: '9px 15px', borderRadius: 10, border: 'none', background: 'var(--blue)', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer' } }, 'Ask Mentor how'))
+          [['var(--emerald)', 'Mastered · ' + masteredSkills], ['var(--blue)', 'In progress · ' + inProgSkills], ['var(--subtle)', 'Locked · ' + (totalSkills - masteredSkills - inProgSkills)]].map((l, i) =>
+            e('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--muted)', fontWeight: 500 } },
+              e('span', { style: { width: 10, height: 10, borderRadius: 99, background: l[0] } }), l[1])))),
+
+      // Vertical expandable tree
+      e('div', { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        phases.map((p, pi) => {
+          const c = LearnFlow.PHASE_COLORS[pi % LearnFlow.PHASE_COLORS.length]
+          const status = p.pct === 100 ? 'learned' : p.status === 'In progress' ? 'inprogress' : 'locked'
+          const isExpanded = expanded[pi] !== false  // default open
+          const skills = p.skills || []
+          const phaseStatusColor = status === 'learned' ? 'var(--emerald)' : status === 'inprogress' ? 'var(--blue)' : 'var(--subtle)'
+          const phaseBg = status === 'learned' ? 'var(--emerald)' : status === 'inprogress' ? 'var(--surface)' : 'var(--surface-2)'
+          const phaseRing = status === 'learned' ? 'var(--emerald)' : status === 'inprogress' ? 'var(--blue)' : 'var(--border-strong)'
+
+          return e('div', { key: pi, style: { borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', overflow: 'hidden', boxShadow: 'var(--shadow-sm)' } },
+            // Phase header — click to expand/collapse
+            e('div', { onClick: () => this.toggleSkillPhase(pi), className: 'lf-btn', style: { display: 'flex', alignItems: 'center', gap: 16, padding: '18px 22px', cursor: 'pointer', borderBottom: isExpanded ? '1px solid var(--border)' : 'none', transition: 'background .2s' } },
+              // Status badge
+              e('div', { style: { width: 44, height: 44, flex: 'none', borderRadius: 13, background: phaseBg, border: '2.5px solid ' + phaseRing, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: status === 'inprogress' ? '0 0 0 5px var(--blue-soft)' : 'none' } },
+                statusIcon(status)),
+              // Phase info
+              e('div', { style: { flex: 1, minWidth: 0 } },
+                e('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+                  e('span', { style: { fontSize: 16, fontWeight: 700 } }, 'Phase ' + p.n + ' · ' + p.title),
+                  e('span', { style: { fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: c.soft, color: c.color } }, p.cert),
+                  e('span', { style: { fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: status === 'learned' ? 'var(--emerald-soft)' : status === 'inprogress' ? 'var(--blue-soft)' : 'var(--surface-2)', color: phaseStatusColor } }, p.status)),
+                e('div', { style: { fontSize: 13, color: 'var(--muted)', marginTop: 4 } }, p.sub)),
+              // Progress + expand toggle
+              e('div', { style: { display: 'flex', alignItems: 'center', gap: 14, flex: 'none' } },
+                e('div', { style: { textAlign: 'right' } },
+                  e('div', { style: { fontSize: 20, fontWeight: 800, color: c.color } }, p.pct + '%'),
+                  e('div', { style: { width: 80, height: 5, borderRadius: 99, background: 'var(--surface-3)', overflow: 'hidden', marginTop: 4 } },
+                    e('div', { style: { height: '100%', width: p.pct + '%', borderRadius: 99, background: c.color } }))),
+                e('div', { style: { fontSize: 18, color: 'var(--muted)', fontWeight: 700, transition: 'transform .25s', transform: isExpanded ? 'rotate(180deg)' : 'none' } }, '▾')),
+            ),
+
+            // Skills — collapsible
+            isExpanded && e('div', { style: { padding: '18px 22px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))', gap: 10 } },
+              // Skills
+              skills.map((skill, si) => {
+                const skillStatus = p.pct === 100 ? 'learned' : (p.status === 'In progress' && si < 2) ? 'inprogress' : 'locked'
+                return e('div', { key: si, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: skillStatus === 'learned' ? 'var(--emerald-soft)' : skillStatus === 'inprogress' ? 'var(--blue-soft)' : 'var(--surface-2)', border: '1px solid ' + (skillStatus === 'inprogress' ? 'var(--blue)' : 'transparent') } },
+                  e('div', { style: { width: 28, height: 28, flex: 'none', borderRadius: 8, background: skillStatus === 'learned' ? 'var(--emerald)' : skillStatus === 'inprogress' ? 'var(--blue)' : 'var(--surface-3)', display: 'flex', alignItems: 'center', justifyContent: 'center' } },
+                    statusIcon(skillStatus)),
+                  e('span', { style: { fontSize: 13.5, fontWeight: 600, color: skillStatus === 'locked' ? 'var(--subtle)' : 'var(--text)' } }, skill))
+              }),
+              // Courses subsection
+              (p.courses || []).length > 0 && e('div', { style: { gridColumn: '1/-1', marginTop: 6, paddingTop: 14, borderTop: '1px solid var(--border)' } },
+                e('div', { style: { fontSize: 12, fontWeight: 700, color: 'var(--subtle)', letterSpacing: '.06em', marginBottom: 10 } }, 'COURSES & RESOURCES'),
+                e('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+                  (p.courses || []).map((course, ci) => {
+                    const [courseStr, url = ''] = course.split(' | ')
+                    const [name, platform] = courseStr.split(' — ')
+                    return e('div', { key: ci, style: { display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: 'var(--surface-2)', cursor: url ? 'pointer' : 'default' }, onClick: () => url && window.open(url, '_blank') },
+                      e('div', { style: { width: 8, height: 8, borderRadius: 99, background: c.color, flex: 'none' } }),
+                      e('span', { style: { fontSize: 13, fontWeight: 500, flex: 1 } }, name),
+                      platform && e('span', { style: { fontSize: 11.5, color: 'var(--muted)', fontWeight: 600 } }, platform),
+                      url && e('svg', { width: 13, height: 13, viewBox: '0 0 24 24', fill: 'none', stroke: 'var(--blue)', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }), e('path', { d: 'M15 3h6v6M10 14 21 3' })))
+                  })))
+            )
+          )
+        }))
     )
   }
 
   buildLibrary() {
     const rm = this.state.roadmap
     const filt = this.state.libraryFilter
+    const sel = this.state.librarySelected
+
     if (!rm) return e('div', { style: { textAlign: 'center', padding: '80px 24px' } },
       e('div', { style: { fontSize: 48, marginBottom: 16 } }, '📚'),
       e('div', { style: { fontSize: 20, fontWeight: 700, marginBottom: 8 } }, 'No resources yet'),
       e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginBottom: 24 } }, 'Your library is populated with courses and resources from your roadmap.'),
       e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '12px 22px', borderRadius: 12, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 14.5, cursor: 'pointer' } }, 'Build my roadmap'))
 
-    // Build items from roadmap phases
     const allItems = []
     ;(rm.phases || []).forEach((p, pi) => {
       const c = LearnFlow.PHASE_COLORS[pi % LearnFlow.PHASE_COLORS.length]
       ;(p.courses || []).forEach((course) => {
-        const parts = course.split(' — ')
-        allItems.push({ t: parts[0], type: 'Course', src: parts[1] || 'Online', meta: p.title + ' · ' + p.cert, tags: [p.cert, ...(p.skills || []).slice(0, 2)], c: c.color, pct: p.pct === 100 ? 100 : p.status === 'In progress' ? Math.min(Math.round(p.pct * 0.9), 95) : 0 })
+        const [courseStr, url = ''] = course.split(' | ')
+        const parts = courseStr.split(' — ')
+        allItems.push({ t: parts[0].trim(), type: 'Course', src: (parts[1] || 'Online').trim(), url: url.trim(), meta: p.title + ' · ' + p.cert, tags: [p.cert, ...(p.skills || []).slice(0, 2)], c: c.color, phase: p, pct: p.pct === 100 ? 100 : p.status === 'In progress' ? Math.min(Math.round(p.pct * 0.9), 95) : 0 })
       })
       ;(p.projects || []).forEach((proj) => {
-        allItems.push({ t: proj, type: 'Project', src: 'Hands-on · ' + p.title, meta: p.assessment || p.cert, tags: [p.cert, 'Project'], c: c.color, pct: p.pct === 100 ? 100 : 0 })
+        allItems.push({ t: proj, type: 'Project', src: 'Hands-on · ' + p.title, url: '', meta: p.assessment || p.cert, tags: [p.cert, 'Project'], c: c.color, phase: p, pct: p.pct === 100 ? 100 : 0 })
       })
     })
     const filters = ['All', 'Course', 'Project']
     const shown = filt === 'All' ? allItems : allItems.filter((i) => i.type === filt)
     const typeIcon = { Course: 'M6 4h10v16H8a2 2 0 0 0-2 2zM6 4v18', Project: 'M3 7h18M3 7l2 13h14l2-13M9 11v5M15 11v5' }
 
-    return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+    // Detail popup modal
+    const modal = sel && e('div', {
+      onClick: (ev) => { if (ev.target === ev.currentTarget) this.setState({ librarySelected: null }) },
+      style: { position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, backdropFilter: 'blur(4px)' },
+    },
+      e('div', { style: { width: '100%', maxWidth: 520, borderRadius: 24, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', animation: 'lf-pop .25s both' } },
+        e('div', { style: { height: 120, background: sel.c, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' } },
+          e('svg', { width: 42, height: 42, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: typeIcon[sel.type] || typeIcon.Course })),
+          sel.pct === 100 && e('span', { style: { position: 'absolute', top: 12, right: 14, fontSize: 12, fontWeight: 700, padding: '4px 11px', borderRadius: 99, background: 'rgba(255,255,255,.92)', color: sel.c } }, '✓ Completed'),
+          e('button', { onClick: () => this.setState({ librarySelected: null }), style: { position: 'absolute', top: 12, left: 14, width: 32, height: 32, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,.25)', color: '#fff', cursor: 'pointer', fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' } }, '×')),
+        e('div', { style: { padding: 28 } },
+          e('div', { style: { fontSize: 11, fontWeight: 700, color: 'var(--subtle)', letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 8 } }, sel.type + ' · ' + sel.src),
+          e('div', { style: { fontSize: 21, fontWeight: 800, letterSpacing: '-.02em', marginBottom: 8, lineHeight: 1.25 } }, sel.t),
+          e('div', { style: { fontSize: 14, color: 'var(--muted)', marginBottom: 16 } }, sel.meta),
+          sel.phase && e('div', { style: { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18, padding: 16, borderRadius: 14, background: 'var(--surface-2)', border: '1px solid var(--border)' } },
+            e('div', { style: { fontSize: 13, fontWeight: 700, marginBottom: 4 } }, 'Phase details'),
+            e('div', { style: { fontSize: 13, color: 'var(--muted)' } }, sel.phase.sub),
+            sel.phase.assessment && e('div', { style: { fontSize: 12.5, color: 'var(--muted)', marginTop: 4 } }, '🎯 Assessment: ' + sel.phase.assessment)),
+          e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 } },
+            (sel.tags || []).filter(Boolean).map((tg, j) => e('span', { key: j, style: { fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 7, background: 'var(--surface-2)', color: 'var(--muted)' } }, tg))),
+          sel.pct > 0 && e('div', { style: { marginBottom: 20 } },
+            e('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--muted)', marginBottom: 6 } }, e('span', {}, 'Progress'), e('span', {}, sel.pct + '%')),
+            e('div', { style: { height: 7, borderRadius: 99, background: 'var(--surface-3)', overflow: 'hidden' } }, e('div', { style: { height: '100%', width: sel.pct + '%', borderRadius: 99, background: sel.c } }))),
+          e('div', { style: { display: 'flex', gap: 10 } },
+            sel.url
+              ? e('a', { href: sel.url, target: '_blank', rel: 'noreferrer', style: { flex: 1, padding: '12px 18px', borderRadius: 12, background: sel.c, color: '#fff', fontWeight: 700, fontSize: 14.5, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 } },
+                  e('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }), e('path', { d: 'M15 3h6v6M10 14 21 3' })),
+                  'Open resource')
+              : e('a', { href: 'https://www.google.com/search?q=' + encodeURIComponent(sel.t + ' ' + sel.src), target: '_blank', rel: 'noreferrer', style: { flex: 1, padding: '12px 18px', borderRadius: 12, background: sel.c, color: '#fff', fontWeight: 700, fontSize: 14.5, textDecoration: 'none', textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 } },
+                  e('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 2.2, strokeLinecap: 'round', strokeLinejoin: 'round' }, e('circle', { cx: 11, cy: 11, r: 7 }), e('path', { d: 'm20 20-3.5-3.5' })),
+                  'Search for this resource'),
+            e('button', { onClick: () => this.setState({ librarySelected: null }), className: 'lf-btn', style: { padding: '12px 16px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontWeight: 600, fontSize: 14, cursor: 'pointer' } }, 'Close'))))
+    )
+
+    return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 18, position: 'relative' } },
+      modal,
       e('div', {},
         e('div', { style: { fontSize: 24, fontWeight: 800, letterSpacing: '-.03em' } }, 'Resource Library'),
         e('div', { style: { fontSize: 14.5, color: 'var(--muted)', marginTop: 3 } }, rm.headline + ' · ' + allItems.length + ' resources across ' + (rm.phases || []).length + ' phases')),
       e('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
         filters.map((f, i) => e('button', { key: i, onClick: this.setLibraryFilter(f), className: 'lf-btn', style: { padding: '8px 14px', borderRadius: 99, border: '1px solid ' + (filt === f ? 'transparent' : 'var(--border)'), background: filt === f ? 'var(--text)' : 'var(--surface)', color: filt === f ? 'var(--bg)' : 'var(--muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer' } }, f))),
       e('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: 16 } },
-        shown.map((it, i) => e('div', { key: i, className: 'lf-card-h', style: { borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden', cursor: 'pointer' } },
+        shown.map((it, i) => e('div', { key: i, className: 'lf-card-h', onClick: () => this.setState({ librarySelected: it }), style: { borderRadius: 18, background: 'var(--surface)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)', overflow: 'hidden', cursor: 'pointer' } },
           e('div', { style: { height: 88, background: it.c, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: .92 } },
             e('svg', { width: 32, height: 32, viewBox: '0 0 24 24', fill: 'none', stroke: '#fff', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', style: { opacity: .9 } }, e('path', { d: typeIcon[it.type] || typeIcon.Course })),
-            it.pct === 100 ? e('span', { style: { position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: 'rgba(255,255,255,.92)', color: it.c } }, '✓ Done') : null),
+            it.pct === 100 ? e('span', { style: { position: 'absolute', top: 8, right: 10, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 99, background: 'rgba(255,255,255,.92)', color: it.c } }, '✓ Done') : null,
+            it.url && e('span', { style: { position: 'absolute', bottom: 8, right: 10, fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 6, background: 'rgba(0,0,0,.3)', color: '#fff' } }, '🔗 Link')),
           e('div', { style: { padding: 16 } },
             e('div', { style: { fontSize: 11, fontWeight: 700, color: 'var(--subtle)', letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 5 } }, it.src),
             e('div', { style: { fontSize: 14.5, fontWeight: 700, lineHeight: 1.3, marginBottom: 6 } }, it.t),
             e('div', { style: { fontSize: 12.5, color: 'var(--muted)', marginBottom: 10 } }, it.meta),
             e('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: it.pct > 0 && it.pct < 100 ? 10 : 0 } },
-              it.tags.filter(Boolean).map((tg, j) => e('span', { key: j, style: { fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 7, background: 'var(--surface-2)', color: 'var(--muted)' } }, tg))),
-            it.pct > 0 && it.pct < 100 ? e('div', { style: { height: 5, borderRadius: 99, background: 'var(--surface-3)', overflow: 'hidden' } }, e('div', { style: { height: '100%', width: it.pct + '%', borderRadius: 99, background: it.c } })) : null))))
-    )
+              (it.tags || []).filter(Boolean).map((tg, j) => e('span', { key: j, style: { fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 7, background: 'var(--surface-2)', color: 'var(--muted)' } }, tg))),
+            it.pct > 0 && it.pct < 100 ? e('div', { style: { height: 5, borderRadius: 99, background: 'var(--surface-3)', overflow: 'hidden' } }, e('div', { style: { height: '100%', width: it.pct + '%', borderRadius: 99, background: it.c } })) : null,
+            e('div', { style: { marginTop: 12, fontSize: 12.5, color: 'var(--blue)', fontWeight: 600 } }, 'Click for details →'))))
+    ))
   }
 
   buildGoals() {
