@@ -114,19 +114,40 @@ export default class LearnFlow extends React.Component {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
         if (session) {
           this.setState({ user: session.user, sessionLoading: false })
-          // Sync with Supabase in background — will merge fresher cloud data over local cache
           this.loadFromSupabase(session.user.id)
+          this._subscribeRealtime(session.user.id)
         } else if (event !== 'INITIAL_SESSION') {
           // SIGNED_OUT
+          this._unsubscribeRealtime()
           this.setState({ sessionLoading: false })
         } else {
-          // No session at all
           this.setState({ sessionLoading: false })
         }
       })
       this._authSub = subscription
     } else {
       this.setState({ sessionLoading: false })
+    }
+  }
+
+  _subscribeRealtime(userId) {
+    if (!supabase || !userId) return
+    this._unsubscribeRealtime() // clear any previous channel
+    this._realtimeChannel = supabase
+      .channel('lf_user_data_' + userId)
+      .on('postgres_changes', {
+        event: 'UPDATE', schema: 'public', table: 'user_data', filter: `id=eq.${userId}`,
+      }, () => {
+        // Another device wrote to the DB — pull the latest state
+        this.loadFromSupabase(userId)
+      })
+      .subscribe()
+  }
+
+  _unsubscribeRealtime() {
+    if (this._realtimeChannel) {
+      supabase.removeChannel(this._realtimeChannel).catch(() => {})
+      this._realtimeChannel = null
     }
   }
 
@@ -201,6 +222,7 @@ export default class LearnFlow extends React.Component {
     if (this._syncTimer) clearTimeout(this._syncTimer)
     if (this._authSub) this._authSub.unsubscribe()
     if (this._onVisible) document.removeEventListener('visibilitychange', this._onVisible)
+    this._unsubscribeRealtime()
   }
 
   go(screen) {
@@ -444,7 +466,21 @@ export default class LearnFlow extends React.Component {
       const saved = s.savedRoadmaps.filter((r) => r.id !== id)
       const roadmap = s.roadmap?.id === id ? (saved[0] || null) : s.roadmap
       return { savedRoadmaps: saved, roadmap, confirmDelete: null }
-    }, () => this._saveToSupabase())
+    }, async () => {
+      // Must use a direct upsert here — _saveToSupabase() skips null roadmap
+      // to protect against accidental overwrites during loading, but for an
+      // explicit delete we MUST send the new value (even null) to the DB.
+      if (!supabase || !this.state.user) return
+      try {
+        const { error } = await supabase.from('user_data').upsert({
+          id: this.state.user.id,
+          roadmap: this.state.roadmap,           // may be null — that's intentional
+          saved_roadmaps: this.state.savedRoadmaps,
+          updated_at: new Date().toISOString(),
+        })
+        if (error) console.error('[LearnFlow] deleteRoadmap DB error:', error.message)
+      } catch (err) { console.error('[LearnFlow] deleteRoadmap failed:', err?.message) }
+    })
   }
 
   saveCurrentChatSession() {
@@ -732,6 +768,7 @@ export default class LearnFlow extends React.Component {
     if (this._saveTimer) { clearTimeout(this._saveTimer); this._saveTimer = null }
     if (this._syncTimer) { clearTimeout(this._syncTimer); this._syncTimer = null }
     await this._saveToSupabase()
+    this._unsubscribeRealtime()
     if (supabase) await supabase.auth.signOut().catch(() => {})
     localStorage.removeItem('lf_state')
     this.setState({
