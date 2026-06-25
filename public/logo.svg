@@ -1,7 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 160" width="560" height="160">
-  <!-- ── TREE MARK (left, 140×140 centred in 160×160 box) ────── -->
-  <g transform="translate(10,10) scale(0.35) translate(-24,-200)">
-    <!-- Open book base -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 440 110" width="440" height="110">
+
+  <!--
+    Tree mark: original elements have centre at (200, 255) in a 400×400 canvas.
+    We want that centre at (65, 52) in this logo canvas, scaled to 0.27.
+    Transform = translate(65,52) scale(0.27) translate(-200,-255)
+    Resulting bounds: x ≈ 22–108  y ≈ 15–86
+  -->
+  <g transform="translate(65,52) scale(0.27) translate(-200,-255)">
+
+    <!-- Open book -->
     <path d="M42,348 Q130,320 196,328 L196,345 Q130,338 42,365 Z" fill="#0D1B3E"/>
     <path d="M204,328 Q272,320 358,348 L358,365 Q272,338 204,345 Z" fill="#152444"/>
 
@@ -13,8 +20,9 @@
     <line x1="200" y1="234" x2="256" y2="200" stroke="#0D1B3E" stroke-width="11" stroke-linecap="round"/>
     <line x1="200" y1="220" x2="176" y2="178" stroke="#0D1B3E" stroke-width="9"  stroke-linecap="round"/>
     <line x1="200" y1="216" x2="226" y2="175" stroke="#0D1B3E" stroke-width="9"  stroke-linecap="round"/>
+    <line x1="200" y1="210" x2="200" y2="168" stroke="#0D1B3E" stroke-width="9"  stroke-linecap="round"/>
 
-    <!-- Leaves -->
+    <!-- Leaves — dark blue bottom-left → royal blue → teal → green (top) → teal → blue → dark blue bottom-right -->
     <ellipse cx="105" cy="288" rx="20" ry="34" fill="#1A237E" transform="rotate(-52,105,288)"/>
     <ellipse cx="80"  cy="264" rx="19" ry="32" fill="#1A237E" transform="rotate(-62,80,264)"/>
     <ellipse cx="76"  cy="237" rx="20" ry="33" fill="#283593" transform="rotate(-68,76,237)"/>
@@ -32,19 +40,20 @@
     <ellipse cx="292" cy="288" rx="20" ry="34" fill="#1A237E" transform="rotate(52,292,288)"/>
   </g>
 
-  <!-- ── VERTICAL DIVIDER ────────────────────────────────────── -->
-  <line x1="158" y1="22" x2="158" y2="138" stroke="#CBD5E1" stroke-width="1.5"/>
+  <!-- Vertical divider — centred on logo height -->
+  <line x1="124" y1="16" x2="124" y2="94" stroke="#CBD5E1" stroke-width="1.5"/>
 
-  <!-- ── WORDMARK ───────────────────────────────────────────── -->
-  <!-- "WinTrail" dark navy + "AI" teal on same baseline -->
-  <text font-family="'Inter','Helvetica Neue',Arial,sans-serif" font-size="54" font-weight="900"
-        y="88" letter-spacing="-1">
-    <tspan x="176" fill="#0D1B3E">WinTrail</tspan><tspan fill="#00BFA5"> AI</tspan>
+  <!-- "WinTrail" (dark navy) + "AI" (teal) — vertically centred -->
+  <text font-family="'Inter','Helvetica Neue',Arial,sans-serif"
+        font-size="46" font-weight="900" letter-spacing="-1" y="65">
+    <tspan x="138" fill="#0D1B3E">WinTrail </tspan><tspan fill="#00BFA5">AI</tspan>
   </text>
 
   <!-- Tagline -->
-  <text x="177" y="118" font-family="'Inter','Helvetica Neue',Arial,sans-serif"
-        font-size="14" font-weight="600" fill="#00BFA5" letter-spacing="2.5">
+  <text x="139" y="84"
+        font-family="'Inter','Helvetica Neue',Arial,sans-serif"
+        font-size="11" font-weight="700" fill="#00BFA5" letter-spacing="2.2">
     LEARN TODAY. LEAD TOMORROW.
   </text>
+
 </svg>
