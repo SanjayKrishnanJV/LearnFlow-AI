@@ -44,7 +44,7 @@ export default class LearnFlow extends React.Component {
     plannerAddCol: null,         // kanban col for inline add form
     plannerAddText: '',
     plannerAddTime: '09:00',
-    progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [] },
+    progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [], phaseProgress: {} },
     userName: '',
     user: null,
     authMode: 'signup',
@@ -99,7 +99,7 @@ export default class LearnFlow extends React.Component {
         if (saved.chatMsgs && saved.chatMsgs.length) patch.chatMsgs = saved.chatMsgs
         if (saved.obData && saved.obData.topic) { patch.obData = saved.obData; patch.obPhase = 'done' }
         if (saved.tasks) patch.tasks = saved.tasks
-        if (saved.progress) patch.progress = { ...{ streak: 0, hoursStudied: 0, lastDate: null, dates: [] }, ...saved.progress }
+        if (saved.progress) patch.progress = { ...{ streak: 0, hoursStudied: 0, lastDate: null, dates: [], phaseProgress: {} }, ...saved.progress }
         if (saved.userName) patch.userName = saved.userName
         if (saved.settings) patch.settings = { ...this.state.settings, ...saved.settings }
         if (Array.isArray(saved.savedRoadmaps)) patch.savedRoadmaps = saved.savedRoadmaps
@@ -276,6 +276,32 @@ export default class LearnFlow extends React.Component {
     return h * 60 + m
   }
 
+  _parseHoursPerDay(str) {
+    if (!str) return 1
+    const s = String(str).toLowerCase()
+    const h = parseFloat(s.match(/(\d+\.?\d*)\s*h/)?.[1] || 0)
+    const m = parseFloat(s.match(/(\d+)\s*min/)?.[1] || 0)
+    return (h + m / 60) || 1
+  }
+
+  _phasePct(phaseIdx) {
+    const rm = this.state.roadmap
+    if (!rm) return 0
+    const phase = rm.phases?.[phaseIdx]
+    if (!phase) return 0
+    const done = (this.state.progress.phaseProgress || {})[phaseIdx] || 0
+    const hpd = this._parseHoursPerDay(rm.hoursPerDay)
+    const weeks = phase.numWeeks || Math.round(rm.totalWeeks / rm.phases.length) || 4
+    const expected = weeks * hpd * 5  // 5 study days per week
+    return Math.min(100, Math.round(done / expected * 100))
+  }
+
+  _currentPhaseIdx() {
+    const phases = this.state.roadmap?.phases || []
+    const idx = phases.findIndex((_, i) => this._phasePct(i) < 100)
+    return idx >= 0 ? idx : phases.length - 1
+  }
+
   toggleTask(i) {
     return () => this.setState((s) => {
       const rm = s.roadmap
@@ -287,14 +313,18 @@ export default class LearnFlow extends React.Component {
       const delta = (nowDone ? 1 : -1) * mins / 60
       const hoursStudied = parseFloat(Math.max(0, (s.progress.hoursStudied || 0) + delta).toFixed(2))
       const today = new Date().toISOString().slice(0, 10)
-      let { streak = 0, lastDate, dates = [] } = s.progress
+      let { streak = 0, lastDate, dates = [], phaseProgress = {} } = s.progress
       if (nowDone && lastDate !== today) {
         const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
         streak = lastDate === yesterday ? streak + 1 : 1
         lastDate = today
         if (!dates.includes(today)) dates = [...dates, today]
       }
-      return { tasks, progress: { streak, hoursStudied, lastDate, dates } }
+      // Track hours per phase so pct updates live
+      const curPhaseIdx = this._currentPhaseIdx()
+      const phaseHours = parseFloat(Math.max(0, ((phaseProgress[curPhaseIdx] || 0) + delta)).toFixed(3))
+      phaseProgress = { ...phaseProgress, [curPhaseIdx]: phaseHours }
+      return { tasks, progress: { streak, hoursStudied, lastDate, dates, phaseProgress } }
     })
   }
 
@@ -1377,9 +1407,15 @@ export default class LearnFlow extends React.Component {
   roadmapData() {
     const rm = this.state.roadmap
     if (rm && Array.isArray(rm.phases) && rm.phases.length > 0) {
+      const curIdx = this._currentPhaseIdx()
       return rm.phases.map((p, i) => {
         const c = LearnFlow.PHASE_COLORS[i % LearnFlow.PHASE_COLORS.length]
-        return { ...p, color: c.color, soft: c.soft }
+        const pct = this._phasePct(i)
+        const status = pct === 100 ? 'Completed'
+          : i === curIdx ? 'In progress'
+          : i < curIdx ? 'Completed'
+          : 'Locked'
+        return { ...p, color: c.color, soft: c.soft, pct, status }
       })
     }
     return []

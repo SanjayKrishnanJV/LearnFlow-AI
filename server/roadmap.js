@@ -28,14 +28,14 @@ Inputs:
 - Goal: ${goal}
 - Daily time available: ${time}
 ${linksSection}
-Today's date: June 2026
+Today's date: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
 
 Return ONLY a JSON object (no markdown fences, no extra text) with this exact structure:
 {
   "headline": "<concise goal title matching the topic, e.g. 'Azure Cloud Architect'>",
   "totalWeeks": <integer 12-52, scaled to topic complexity and time commitment>,
   "hoursPerDay": "<matches the time input, e.g. '1 hour'>",
-  "targetDate": "<Month Year calculated by adding totalWeeks to June 2026>",
+  "targetDate": "<Month Year calculated by adding totalWeeks from today's date>",
   "phases": [
     {
       "n": 1,
