@@ -389,7 +389,7 @@ export default class LearnFlow extends React.Component {
 
     const navDefs = [
       ['dashboard', 'Dashboard', 'M4 4h7v7H4z M13 4h7v4h-7z M13 11h7v9h-7z M4 14h7v6H4z', ''],
-      ['roadmap', 'Roadmap', 'M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z M9 4v14 M15 6v14', '3'],
+      ['roadmap', 'Roadmap', 'M9 4 4 6v14l5-2 6 2 5-2V4l-5 2-6-2z M9 4v14 M15 6v14', ''],
       ['planner', 'Planner', 'M4 7h16v13H4z M4 11h16 M8 4v4 M16 4v4', ''],
       ['analytics', 'Analytics', 'M4 20V11 M10 20V4 M16 20v-6 M3 20h18', ''],
       ['skilltree', 'Skill Tree', 'M12 3v4 M6 17l6-6 6 6 M10 3h4v4h-4z M4 17h4v4H4z M16 17h4v4h-4z', ''],
