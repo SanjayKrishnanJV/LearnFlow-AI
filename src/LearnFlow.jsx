@@ -1065,7 +1065,17 @@ export default class LearnFlow extends React.Component {
   buildDashboard() {
     const rm = this.state.roadmap
     const phases = this.roadmapData()
-    const days = [['M', 60], ['T', 85], ['W', 45], ['T', 92], ['F', 70], ['S', 100], ['S', 38]]
+    // Weekly bars: derive from progress.dates (real activity) — 0 if no data for that day
+    const { dates = [] } = this.state.progress
+    const now = new Date()
+    const dow = now.getDay() // 0=Sun
+    const mon = new Date(now); mon.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1))
+    const dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+    const days = dayLetters.map((letter, i) => {
+      const d = new Date(mon); d.setDate(mon.getDate() + i)
+      const iso = d.toISOString().slice(0, 10)
+      return [letter, dates.includes(iso) ? 70 : 0]
+    })
     const max = 100
     const { streak: realStreak, hoursStudied: realHours } = this.state.progress
     const displayName = this.state.userName || ''
@@ -1121,8 +1131,8 @@ export default class LearnFlow extends React.Component {
               e('span', { style: { fontSize: 28, fontWeight: 800, lineHeight: 1 } }, score), e('span', { style: { fontSize: 11, opacity: .85 } }, '/ 1000'))),
           e('div', {},
             e('div', { style: { fontSize: 13, opacity: .85, fontWeight: 600 } }, 'Learning Score'),
-            e('div', { style: { fontSize: 15, fontWeight: 700, margin: '6px 0 4px' } }, '▲ 34 this week'),
-            e('div', { style: { fontSize: 13, opacity: .9 } }, 'Top 8% of learners'))),
+            e('div', { style: { fontSize: 15, fontWeight: 700, margin: '6px 0 4px' } }, score > 0 ? '▲ ' + score + ' pts total' : 'Complete tasks to earn points'),
+            e('div', { style: { fontSize: 13, opacity: .9 } }, score > 0 ? 'Keep the streak going!' : 'Check off today\'s tasks to start'))),
         ...[
           { label: 'Learning Streak', val: String(streak), unit: 'days', sub: streak > 0 ? 'Keep going! 💪' : 'Start today!', ic: 'M12 2c1 3 4 4 4 8a4 4 0 0 1-8 0c0-1 .5-2 1-2.5C9 9 12 8 12 2z', cl: 'var(--amber)', sf: 'var(--amber-soft)' },
           { label: 'Time Invested', val: String(hoursDisplay), unit: 'hrs', sub: doneTasks + ' tasks done today', ic: 'M12 6v6l4 2M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z', cl: 'var(--blue)', sf: 'var(--blue-soft)' },
@@ -1158,10 +1168,18 @@ export default class LearnFlow extends React.Component {
             e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 } },
               e('span', { style: { fontSize: 16, fontWeight: 700 } }, 'Weekly Progress'),
               e('span', { style: { fontSize: 13, color: 'var(--muted)' } }, 'Minutes studied · this week')),
-            e('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 12, height: 140 } },
-              days.map((d, i) => e('div', { key: i, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%', justifyContent: 'flex-end' } },
-                e('div', { style: { width: '100%', maxWidth: 34, height: (d[1] / max * 108) + 'px', borderRadius: 8, background: i === 5 ? 'linear-gradient(var(--blue),var(--violet))' : 'var(--blue-soft)', transformOrigin: 'bottom', animation: 'lf-rise .6s ' + (i * 0.05) + 's both cubic-bezier(.22,1,.36,1)' } }),
-                e('span', { style: { fontSize: 12, color: 'var(--subtle)', fontWeight: 600 } }, d[0])))))),
+            days.some((d) => d[1] > 0)
+              ? e('div', { style: { display: 'flex', alignItems: 'flex-end', gap: 12, height: 140 } },
+                  days.map((d, i) => {
+                    const isToday = i === (dow === 0 ? 6 : dow - 1)
+                    return e('div', { key: i, style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%', justifyContent: 'flex-end' } },
+                      e('div', { style: { width: '100%', maxWidth: 34, height: Math.max(d[1] > 0 ? 70 : 4, 4) + 'px', borderRadius: 8, background: d[1] > 0 ? (isToday ? 'linear-gradient(var(--blue),var(--violet))' : 'var(--blue-soft)') : 'var(--surface-3)', transformOrigin: 'bottom', animation: 'lf-rise .6s ' + (i * 0.05) + 's both cubic-bezier(.22,1,.36,1)' } }),
+                      e('span', { style: { fontSize: 12, color: 'var(--subtle)', fontWeight: 600 } }, d[0]))
+                  }))
+              : e('div', { style: { height: 140, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--muted)' } },
+                  e('div', { style: { fontSize: 28 } }, '📊'),
+                  e('div', { style: { fontSize: 13.5, fontWeight: 500 } }, 'No activity this week yet'),
+                  e('div', { style: { fontSize: 12.5 } }, 'Complete a task to log your first session')))),
         e('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } },
           e('div', { style: { borderRadius: 20, background: 'var(--surface)', border: '1px solid var(--border)', padding: 22, boxShadow: 'var(--shadow-sm)' } },
             e('div', { style: { fontSize: 16, fontWeight: 700, marginBottom: 16 } }, "Today's Tasks"),
