@@ -34,6 +34,7 @@ export default class LearnFlow extends React.Component {
     plannerView: 'week',
     libraryFilter: 'All',
     roadmap: null,
+    savedRoadmaps: [],  // [{id, createdAt, headline, ...full roadmap data}]
     tasks: null,
     progress: { streak: 0, hoursStudied: 0, lastDate: null, dates: [] },
     userName: '',
@@ -93,6 +94,7 @@ export default class LearnFlow extends React.Component {
         if (saved.progress) patch.progress = { ...{ streak: 0, hoursStudied: 0, lastDate: null, dates: [] }, ...saved.progress }
         if (saved.userName) patch.userName = saved.userName
         if (saved.settings) patch.settings = { ...this.state.settings, ...saved.settings }
+        if (Array.isArray(saved.savedRoadmaps)) patch.savedRoadmaps = saved.savedRoadmaps
         if (saved.screen && !['landing', 'onboarding', 'auth'].includes(saved.screen)) patch.screen = saved.screen
         if (Object.keys(patch).length) this.setState(patch)
       }
@@ -103,8 +105,8 @@ export default class LearnFlow extends React.Component {
     if (this._saveTimer) clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       try {
-        const { theme, roadmap, chatMsgs, obData, screen, tasks, progress, userName, settings } = this.state
-        localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, chatMsgs, obData, screen, tasks, progress, userName, settings }))
+        const { theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings } = this.state
+        localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings }))
       } catch { /* ignore */ }
     }, 300)
     // Debounced Supabase sync (1 s) when logged in
@@ -152,7 +154,12 @@ export default class LearnFlow extends React.Component {
           .then((r) => r.json())
           .then((data) => {
             if (data && Array.isArray(data.phases) && data.phases.length > 0) {
-              this.setState({ roadmap: data, tasks: Array.isArray(data.todaysTasks) ? data.todaysTasks : null })
+              const rm = { ...data, id: Date.now().toString(), createdAt: new Date().toISOString() }
+              this.setState((s) => ({
+                roadmap: rm,
+                tasks: Array.isArray(data.todaysTasks) ? data.todaysTasks : null,
+                savedRoadmaps: [rm, ...s.savedRoadmaps],
+              }))
             }
           })
           .catch(() => { /* no key or error — fall back to mock data silently */ })
@@ -292,6 +299,19 @@ export default class LearnFlow extends React.Component {
 
   setSetting(key, val) { this.setState((s) => ({ settings: { ...s.settings, [key]: val } })) }
 
+  switchRoadmap(id) {
+    const rm = this.state.savedRoadmaps.find((r) => r.id === id)
+    if (rm) this.setState({ roadmap: rm, tasks: Array.isArray(rm.todaysTasks) ? rm.todaysTasks : null, roadmapPhase: 0 })
+  }
+
+  deleteRoadmap(id) {
+    this.setState((s) => {
+      const saved = s.savedRoadmaps.filter((r) => r.id !== id)
+      const roadmap = s.roadmap?.id === id ? (saved[0] || null) : s.roadmap
+      return { savedRoadmaps: saved, roadmap }
+    })
+  }
+
   freshOnboarding() {
     return () => this.setState({
       screen: 'onboarding',
@@ -323,6 +343,7 @@ export default class LearnFlow extends React.Component {
         if (data.ob_data && data.ob_data.topic) { patch.obData = data.ob_data; patch.obPhase = 'done' }
         if (data.chat_msgs && data.chat_msgs.length) patch.chatMsgs = data.chat_msgs
         if (data.settings) patch.settings = { ...this.state.settings, ...data.settings }
+        if (Array.isArray(data.saved_roadmaps)) patch.savedRoadmaps = data.saved_roadmaps
         this.setState(patch)
       } else {
         this.setState({ screen: 'onboarding' })
@@ -334,11 +355,11 @@ export default class LearnFlow extends React.Component {
 
   async _saveToSupabase() {
     if (!supabase || !this.state.user) return
-    const { roadmap, tasks, progress, userName, obData, chatMsgs, settings } = this.state
+    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings } = this.state
     try {
       await supabase.from('user_data').upsert({
         id: this.state.user.id,
-        roadmap, tasks, progress, settings,
+        roadmap, saved_roadmaps: savedRoadmaps, tasks, progress, settings,
         user_name: userName,
         ob_data: obData,
         chat_msgs: chatMsgs,
@@ -752,7 +773,7 @@ export default class LearnFlow extends React.Component {
             <div style={S('width:32px; height:32px; border-radius:9px; background:linear-gradient(135deg,var(--blue),var(--violet)); display:flex; align-items:center; justify-content:center')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7l8-4 8 4-8 4-8-4z" /><path d="M4 7v6l8 4 8-4V7" /></svg></div>
             <span style={S('font-weight:800; font-size:16px')}>LearnFlow<span style={S('color:var(--blue)')}> AI</span></span>
           </div>
-          <button className="lf-btn" onClick={v.goTo.landing} style={S('padding:8px 14px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:13px; font-weight:600; cursor:pointer')}>Skip</button>
+          <button className="lf-btn" onClick={this.state.user || this.state.savedRoadmaps.length > 0 ? v.goTo.dashboard : v.goTo.landing} style={S('padding:8px 14px; border-radius:10px; border:1px solid var(--border); background:var(--surface); color:var(--muted); font-size:13px; font-weight:600; cursor:pointer')}>{this.state.user || this.state.savedRoadmaps.length > 0 ? '← Back' : 'Skip'}</button>
         </div>
         <div style={S('height:4px; background:var(--surface-2)')}><div style={S(`height:100%; width:${v.obProgress}; background:linear-gradient(90deg,var(--blue),var(--violet)); border-radius:0 99px 99px 0; transition:width .5s cubic-bezier(.22,1,.36,1)`)} /></div>
 
@@ -1284,7 +1305,22 @@ export default class LearnFlow extends React.Component {
     const rmCurPhase = phases.findIndex((p) => p.status === 'In progress') + 1 || 1
     const rmStats = [['Overall', rmOverallPct + '%'], ['Phase', rmCurPhase + ' of ' + phases.length], ['Streak', this.state.progress.streak + ' days'], ['On track', 'Yes']]
 
+    const saved = this.state.savedRoadmaps
+
     return e('div', { style: { display: 'flex', flexDirection: 'column', gap: 22 } },
+      // Roadmap switcher — shown only when multiple roadmaps exist
+      saved.length > 1 && e('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+        e('span', { style: { fontSize: 13, fontWeight: 600, color: 'var(--muted)' } }, 'Your roadmaps:'),
+        e('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', flex: 1 } },
+          saved.map((r, i) => {
+            const isActive = r.id === rm.id
+            return e('div', { key: r.id, style: { display: 'flex', alignItems: 'center', gap: 0, borderRadius: 10, border: '1.5px solid ' + (isActive ? 'var(--blue)' : 'var(--border)'), background: isActive ? 'var(--blue-soft)' : 'var(--surface)', overflow: 'hidden' } },
+              e('button', { className: 'lf-btn', onClick: () => this.switchRoadmap(r.id), style: { padding: '7px 13px', border: 'none', background: 'transparent', color: isActive ? 'var(--blue-ink)' : 'var(--muted)', fontWeight: isActive ? 700 : 500, fontSize: 13, cursor: 'pointer' } }, r.headline),
+              !isActive && e('button', { className: 'lf-btn', onClick: () => this.deleteRoadmap(r.id), style: { padding: '7px 8px', border: 'none', background: 'transparent', color: 'var(--subtle)', fontSize: 13, cursor: 'pointer', lineHeight: 1 } }, '×'))
+          })),
+        e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' } }, '+ New roadmap')),
+      saved.length === 1 && e('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
+        e('button', { className: 'lf-btn', onClick: this.freshOnboarding(), style: { padding: '8px 14px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer' } }, '+ Build another roadmap')),
       e('div', { style: { borderRadius: 24, padding: '28px 30px', background: 'linear-gradient(135deg,var(--blue),var(--violet))', color: '#fff', boxShadow: 'var(--shadow)', position: 'relative', overflow: 'hidden' } },
         e('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 20 } },
           e('div', {},
