@@ -103,6 +103,9 @@ export default class LearnFlow extends React.Component {
         if (saved.userName) patch.userName = saved.userName
         if (saved.settings) patch.settings = { ...this.state.settings, ...saved.settings }
         if (Array.isArray(saved.savedRoadmaps)) patch.savedRoadmaps = saved.savedRoadmaps
+        if (saved.plannerItems && typeof saved.plannerItems === 'object') patch.plannerItems = saved.plannerItems
+        if (saved.kanbanCards) patch.kanbanCards = saved.kanbanCards
+        if (saved.expandedSkillPhases) patch.expandedSkillPhases = saved.expandedSkillPhases
         if (saved.screen && !['landing', 'onboarding', 'auth'].includes(saved.screen)) patch.screen = saved.screen
         if (Object.keys(patch).length) this.setState(patch)
       }
@@ -113,8 +116,8 @@ export default class LearnFlow extends React.Component {
     if (this._saveTimer) clearTimeout(this._saveTimer)
     this._saveTimer = setTimeout(() => {
       try {
-        const { theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings } = this.state
-        localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings }))
+        const { theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases } = this.state
+        localStorage.setItem('lf_state', JSON.stringify({ theme, roadmap, savedRoadmaps, chatMsgs, obData, screen, tasks, progress, userName, settings, plannerItems, kanbanCards, expandedSkillPhases }))
       } catch { /* ignore */ }
     }, 300)
     // Debounced Supabase sync (1 s) when logged in
@@ -448,6 +451,9 @@ export default class LearnFlow extends React.Component {
         if (data.chat_msgs && data.chat_msgs.length) patch.chatMsgs = data.chat_msgs
         if (data.settings) patch.settings = { ...this.state.settings, ...data.settings }
         if (Array.isArray(data.saved_roadmaps)) patch.savedRoadmaps = data.saved_roadmaps
+        if (data.planner_items && typeof data.planner_items === 'object') patch.plannerItems = data.planner_items
+        if (data.kanban_cards) patch.kanbanCards = data.kanban_cards
+        if (data.expanded_skill_phases) patch.expandedSkillPhases = data.expanded_skill_phases
         this.setState(patch)
       } else {
         this.setState({ screen: 'onboarding' })
@@ -459,11 +465,14 @@ export default class LearnFlow extends React.Component {
 
   async _saveToSupabase() {
     if (!supabase || !this.state.user) return
-    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings } = this.state
+    const { roadmap, savedRoadmaps, tasks, progress, userName, obData, chatMsgs, settings, plannerItems, kanbanCards, expandedSkillPhases } = this.state
     try {
       await supabase.from('user_data').upsert({
         id: this.state.user.id,
         roadmap, saved_roadmaps: savedRoadmaps, tasks, progress, settings,
+        planner_items: plannerItems,
+        kanban_cards: kanbanCards,
+        expanded_skill_phases: expandedSkillPhases,
         user_name: userName,
         ob_data: obData,
         chat_msgs: chatMsgs,
