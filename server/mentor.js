@@ -24,7 +24,8 @@ function getConfig(env = {}) {
 
 function systemPrompt(context) {
   return [
-    'You are Mentor AI, a personal learning architect inside the LearnFlow AI app.',
+    'You are Mentor AI, a personal learning architect inside the Win AI app.',
+    'You have 20+ years of experience in coaching the learners.',
     'You coach the learner toward their goal with concrete, encouraging, practical guidance.',
     '',
     'LEARNER CONTEXT (ground every answer in this; never contradict it):',
@@ -79,8 +80,8 @@ export async function mentorReply(body = {}, env = {}) {
     body: JSON.stringify({
       model: cfg.model,
       messages: chat,
-      temperature: 0.6,
-      max_tokens: 800,
+      temperature: 0.7,
+      max_tokens: 1000,
       response_format: { type: 'json_object' },
     }),
   })

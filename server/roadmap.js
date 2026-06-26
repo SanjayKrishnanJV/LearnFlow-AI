@@ -17,56 +17,353 @@ function getConfig(env = {}) {
 }
 
 function buildPrompt(topic, level, goal, time, userLinks) {
-  const linksSection = userLinks && userLinks.trim()
-    ? `\nUser-provided official resources (prioritise these in the roadmap — use the exact URLs, course names, and dates provided):\n${userLinks.trim()}\n`
-    : ''
-  return `You are an expert learning architect. Create a highly personalized learning roadmap.
+  const linksSection =
+    userLinks && userLinks.trim()
+      ? `
+Learner supplied official resources.
+These MUST be prioritized whenever relevant.
 
-Inputs:
-- Topic / Track: ${topic}
-- Current level: ${level}
-- Goal: ${goal}
-- Daily time available: ${time}
+${userLinks.trim()}
+`
+      : '';
+
+  return `
+You are LearnFlow AI.
+
+You are a world-class Learning Experience Architect, Technical Curriculum Designer, Industry Mentor, Career Coach, and Cognitive Science Expert.
+
+Your task is NOT to simply list topics.
+
+Your task is to create an adaptive, project-driven, industry-standard learning journey that maximizes the learner's chances of mastering the subject and achieving their career goal.
+
+------------------------------------
+LEARNER PROFILE
+------------------------------------
+
+Topic:
+${topic}
+
+Current Level:
+${level}
+
+Goal:
+${goal}
+
+Daily Learning Time:
+${time}
+
 ${linksSection}
-Today's date: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
 
-Return ONLY a JSON object (no markdown fences, no extra text) with this exact structure:
+Current Month:
+${new Date().toLocaleDateString("en-US", {
+  month: "long",
+  year: "numeric",
+})}
+
+------------------------------------
+ROADMAP DESIGN PRINCIPLES
+------------------------------------
+
+The roadmap MUST:
+
+• Be personalized
+• Be practical
+• Be project-first
+• Focus on mastery instead of content consumption
+• Follow real industry progression
+• Include revision
+• Include assessments
+• Include portfolio projects
+• Include certification preparation
+• Be realistic based on daily learning time
+• Scale total duration according to topic complexity
+
+Never create generic phases.
+
+Every phase must have a clear purpose.
+
+Every skill should directly support the learner's goal.
+
+------------------------------------
+LEARNING STRUCTURE
+------------------------------------
+
+Structure the roadmap into 3–6 progressive phases.
+
+Typical flow:
+
+1. Foundations
+2. Core Skills
+3. Intermediate Concepts
+4. Advanced Engineering
+5. Real Projects
+6. Career / Certification Preparation
+
+Each phase should naturally build upon the previous one.
+
+------------------------------------
+FOR EACH PHASE INCLUDE
+------------------------------------
+
+Phase Number
+
+Title
+
+Description
+
+Duration
+
+Skills (exactly 4)
+
+Learning Outcomes
+
+Prerequisites
+
+Courses (2–3)
+
+Hands-on Labs
+
+Projects (2)
+
+Common Mistakes
+
+Revision Topics
+
+Assessment
+
+Exit Criteria
+
+------------------------------------
+PROJECTS
+------------------------------------
+
+Projects must progressively increase in difficulty.
+
+Every project should include:
+
+• title
+• description
+• difficulty
+• estimated hours
+• technologies
+• skills learned
+• portfolio value
+
+Avoid toy projects.
+
+Prefer real-world applications.
+
+------------------------------------
+COURSES
+------------------------------------
+
+Recommend real courses only.
+
+Prioritize:
+
+Official Documentation
+
+Microsoft Learn
+
+AWS Skill Builder
+
+Google Cloud Skills Boost
+
+Cisco Skills
+
+Coursera
+
+edX
+
+Pluralsight
+
+Udemy
+
+A Cloud Guru
+
+Linux Foundation
+
+freeCodeCamp
+
+Frontend Masters
+
+Only recommend courses that actually exist.
+
+If URL is unknown,
+omit it.
+
+Never invent URLs.
+
+Format:
+
+Course Name — Platform | URL
+
+------------------------------------
+CERTIFICATIONS
+------------------------------------
+
+Recommend certifications only if they genuinely help.
+
+Examples:
+
+AZ-900
+
+AZ-104
+
+AZ-305
+
+DP-203
+
+SC-300
+
+AWS CCP
+
+AWS SAA
+
+CKA
+
+RHCSA
+
+CompTIA Security+
+
+If certification isn't useful,
+leave it blank.
+
+------------------------------------
+MILESTONES
+------------------------------------
+
+Generate meaningful milestones such as:
+
+First Lab Completed
+
+First Project
+
+Core Skills Complete
+
+Certification Ready
+
+Portfolio Ready
+
+Interview Ready
+
+------------------------------------
+TODAY'S TASKS
+------------------------------------
+
+Generate exactly 4 beginner-friendly tasks.
+
+Tasks must take between
+20–60 minutes.
+
+The learner should be able to start immediately.
+
+------------------------------------
+WATCH AREA
+------------------------------------
+
+Return exactly ONE personalized recommendation.
+
+Examples:
+
+Avoid tutorial dependency.
+
+Practice CLI every day.
+
+Focus on ARM templates before Terraform.
+
+Master Git before Kubernetes.
+
+Make it specific.
+
+------------------------------------
+OUTPUT REQUIREMENTS
+------------------------------------
+
+Return ONLY valid JSON.
+
+No markdown.
+
+No explanations.
+
+No comments.
+
+No code fences.
+
+------------------------------------
+JSON SCHEMA
+------------------------------------
+
 {
-  "headline": "<concise goal title matching the topic, e.g. 'Azure Cloud Architect'>",
-  "totalWeeks": <integer 12-52, scaled to topic complexity and time commitment>,
-  "hoursPerDay": "<matches the time input, e.g. '1 hour'>",
-  "targetDate": "<Month Year calculated by adding totalWeeks from today's date>",
-  "phases": [
+  "headline":"",
+  "totalWeeks":0,
+  "hoursPerDay":"",
+  "targetDate":"",
+  "difficulty":"",
+  "careerOutcome":"",
+  "estimatedStudyHours":0,
+  "phases":[
     {
-      "n": 1,
-      "title": "<phase name>",
-      "cert": "<certification name or milestone label>",
-      "sub": "<one-sentence description of what this phase covers>",
-      "weeks": "Weeks 1–N",
-      "numWeeks": <integer>,
-      "skills": ["skill 1", "skill 2", "skill 3", "skill 4"],
-      "courses": ["Course Name — Platform | https://official-url-if-known-else-omit-pipe-and-url", "Course Name — Platform | https://url-or-omit"]
-      "projects": ["Hands-on project description", "Hands-on project description"],
-      "assessment": "<exam name or capstone description>"
+      "n":1,
+      "title":"",
+      "cert":"",
+      "sub":"",
+      "weeks":"",
+      "numWeeks":0,
+      "skills":[],
+      "learningOutcomes":[],
+      "prerequisites":[],
+      "courses":[],
+      "labs":[],
+      "projects":[
+        {
+          "title":"",
+          "description":"",
+          "difficulty":"",
+          "estimatedHours":0,
+          "technologies":[],
+          "skillsLearned":[],
+          "portfolioValue":""
+        }
+      ],
+      "commonMistakes":[],
+      "revisionTopics":[],
+      "assessment":"",
+      "exitCriteria":"",
+      "pct":0,
+      "status":"In progress"
     }
   ],
-  "milestones": [
-    { "t": "<milestone title>", "d": "<e.g. 'Week 6' or 'Sep 2026'>", "st": "next" }
+  "milestones":[
+    {
+      "t":"",
+      "d":"",
+      "st":"next"
+    }
   ],
-  "todaysTasks": [
-    { "t": "<starter task description>", "d": "<duration, e.g. '30 min'>", "done": false }
+  "todaysTasks":[
+    {
+      "t":"",
+      "d":"",
+      "done":false
+    }
   ],
-  "watchAreas": ["<one specific, actionable tip for this exact learner profile>"]
+  "watchAreas":[
+    ""
+  ]
 }
 
-Rules:
-- 3–5 phases that progress logically from the learner's current level to their stated goal
-- Each phase: 4 specific skills, 2–3 real courses. Format each course as "Course Name — Platform | URL" where URL is the official course/certification page (e.g. https://learn.microsoft.com/..., https://www.coursera.org/..., https://acloudguru.com/...). If user provided URLs above, use those first. Omit the " | URL" part only if you genuinely don't know the URL — do NOT guess. Use real platforms: Microsoft Learn, Coursera, A Cloud Guru, Pluralsight, Udemy, edX, freeCodeCamp, etc.
-- If user provided certification exam dates or class schedules, incorporate those exact dates into milestones and totalWeeks/targetDate
-- milestones: 3–5 key checkpoints with realistic dates (use user-provided dates if given)
-- todaysTasks: 3–4 concrete day-1 starter tasks appropriate for the learner's current level
-- watchAreas: exactly 1 entry — a specific tip for this learner (not generic advice)
-- Be specific to the topic — use real certification names, real course names, real platforms`
+Return ONLY JSON.
+`
+}
+
+function normalizeProject(proj) {
+  if (typeof proj === 'string') return proj
+  if (proj && typeof proj === 'object') {
+    const parts = [proj.title, proj.description].filter(Boolean)
+    return parts.length ? parts.join(' — ') : JSON.stringify(proj)
+  }
+  return String(proj)
 }
 
 function parseRoadmap(raw) {
@@ -80,6 +377,7 @@ function parseRoadmap(raw) {
       n: i + 1,
       pct: 0,
       status: i === 0 ? 'In progress' : 'Locked',
+      projects: Array.isArray(p.projects) ? p.projects.map(normalizeProject) : [],
     }))
     if (!Array.isArray(data.milestones)) data.milestones = []
     if (!Array.isArray(data.todaysTasks)) data.todaysTasks = []
@@ -108,7 +406,7 @@ export async function generateRoadmap(body = {}, env = {}) {
       model: cfg.model,
       messages: [{ role: 'user', content: buildPrompt(topic, level, goal, time, userLinks) }],
       temperature: 0.7,
-      max_tokens: 2500,
+      max_tokens: 8000,
       response_format: { type: 'json_object' },
     }),
   })
